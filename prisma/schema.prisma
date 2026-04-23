@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String             @id @default(cuid())
+  name           String
+  email          String             @unique
+  password       String
+  role           String             @default("user") // "user" | "admin" | "super_admin" | (future: "instructor")
+  enrollments    Enrollment[]
+  progress       Progress[]
+  submissions    Submission[]
+  taughtCourses  CourseInstructor[] // populated when user is assigned as instructor
+  createdAt      DateTime           @default(now())
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String?  @unique // e.g. "CS", "BIO" — optional short identifier
+  courses   Course[]
+  createdAt DateTime @default(now())
+}
+
+model Course {
+  id           String             @id @default(cuid())
+  title        String
+  description  String
+  releaseMode  String             @default("manual")
+  departmentId String?            // optional — can be null indefinitely
+  department   Department?        @relation(fields: [departmentId], references: [id])
+  units        Unit[]
+  enrollments  Enrollment[]
+  accessCodes  AccessCode[]
+  instructors  CourseInstructor[]
+  createdAt    DateTime           @default(now())
+}
+
+// Junction: which users are instructors on which courses (optional, multi-instructor ready)
+model CourseInstructor {
+  courseId  String
+  userId    String
+  role      String   @default("instructor") // "lead" | "assistant" | "instructor"
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([courseId, userId])
+}
+
+model Unit {
+  id         String     @id @default(cuid())
+  courseId   String
+  course     Course     @relation(fields: [courseId], references: [id])
+  title      String
+  content    String
+  zoomLink   String?
+  orderIndex Int
+  openDate   DateTime?
+  isOpen     Boolean    @default(false)
+  progress   Progress[]
+  createdAt  DateTime   @default(now())
+  assignment Assignment?
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  user      User     @relation(fields: [userId], references: [id])
+  course    Course   @relation(fields: [courseId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, courseId])
+}
+
+model Progress {
+  id        String   @id @default(cuid())
+  userId    String
+  unitId    String
+  completed Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id])
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, unitId])
+}
+
+model AccessCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Assignment {
+  id          String       @id @default(cuid())
+  courseId    String
+  unitId      String       @unique
+  title       String
+  description String
+  dueDate     DateTime?
+  maxScore    Int          @default(100)
+  unit        Unit         @relation(fields: [unitId], references: [id])
+  submissions Submission[]
+  createdAt   DateTime     @default(now())
+}
+
+model Submission {
+  id             String     @id @default(cuid())
+  assignmentId   String
+  userId         String
+  textSubmission String?
+  fileUrl        String?
+  grade          Int?
+  feedback       String?
+  status         String     @default("submitted")
+  submittedAt    DateTime   @default(now())
+  assignment     Assignment @relation(fields: [assignmentId], references: [id])
+  user           User       @relation(fields: [userId], references: [id])
+
+  @@unique([assignmentId, userId])
+}
