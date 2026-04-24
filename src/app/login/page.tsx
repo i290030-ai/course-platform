@@ -1,7 +1,8 @@
 'use client'
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, getSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { isAdminRole } from '@/lib/roles'
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'code'>('login')
@@ -16,17 +17,27 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-    })
-    setLoading(false)
+
+    const result = await signIn('credentials', { email, password, redirect: false })
+
     if (result?.error) {
+      setLoading(false)
       setError('אימייל או סיסמה שגויים')
-    } else {
-      router.push('/dashboard')
+      return
     }
+
+    // Fetch the updated session to read the role immediately
+    const session = await getSession()
+    const role = session?.user?.role
+
+    if (isAdminRole(role)) {
+      router.push('/admin')
+    } else if (role === 'instructor') {
+      router.push('/dashboard')
+    } else {
+      router.push('/courses')
+    }
+    // keep loading=true while router navigates
   }
 
   const handleCode = async (e: React.FormEvent) => {
