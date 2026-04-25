@@ -482,7 +482,8 @@ export default function UnitTemplate({
           document.getElementById('unit-completion')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }, 200)
       }
-    } catch {
+    } catch (err) {
+      console.error('[UnitTemplate] handleComplete error:', err)
       setSaving(false)
     }
   }
@@ -685,7 +686,7 @@ export default function UnitTemplate({
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">📝 הערות</p>
                               <div
                                 className="text-gray-700 text-sm leading-7 whitespace-pre-line"
-                                dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }}
+                                dangerouslySetInnerHTML={{ __html: (content ?? '').replace(/\n/g, '<br/>') }}
                               />
                             </div>
                           )}
@@ -694,7 +695,7 @@ export default function UnitTemplate({
                         <div className="bg-slate-50 rounded-2xl px-7 py-6 border border-slate-100">
                           <div
                             className="text-gray-700 text-[15px] leading-8 whitespace-pre-line"
-                            dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }}
+                            dangerouslySetInnerHTML={{ __html: (content ?? '').replace(/\n/g, '<br/>') }}
                           />
                         </div>
                       )}

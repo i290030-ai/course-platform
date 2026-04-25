@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import type { AiFeedbackData } from '@/app/api/submissions/[id]/ai-feedback/route'
 
 /* ─────────────────────────────────────────
@@ -141,26 +141,11 @@ export default function AssignmentPanel({ unitId }: { unitId: string }) {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiFeedback, setAiFeedback] = useState<AiFeedbackData | null>(null)
 
-  useEffect(() => {
-    fetch(`/api/assignments/unit/${unitId}`)
-      .then(r => r.json())
-      .then((d: AssignmentData) => {
-        setData(d)
-        // If existing submission already has AI feedback, parse it
-        if (d?.submission?.feedback) {
-          const parsed = parseAiFeedback(d.submission.feedback)
-          if (parsed) setAiFeedback(parsed)
-        }
-      })
-  }, [unitId])
-
-  if (data === undefined || data === null) return null
-
-  const sub = data.submission
-  const alreadySubmitted = !!sub
-
-  /* ── Request AI feedback for a submission ── */
-  const requestAiFeedback = async (submissionId: string) => {
+  /* ── Request AI feedback — defined with useCallback BEFORE any early return
+     so that the useEffect below can safely reference it unconditionally.
+     Violating this order causes a "Rendered more hooks than during the previous
+     render" crash (Rules of Hooks). ── */
+  const requestAiFeedback = useCallback(async (submissionId: string) => {
     setAiLoading(true)
     try {
       const res = await fetch(`/api/submissions/${submissionId}/ai-feedback`, { method: 'POST' })
@@ -169,7 +154,6 @@ export default function AssignmentPanel({ unitId }: { unitId: string }) {
       const parsed = parseAiFeedback(updated.feedback)
       if (parsed) {
         setAiFeedback(parsed)
-        // Update local submission state with grade + status
         setData(prev => prev ? {
           ...prev,
           submission: { ...prev.submission!, grade: updated.grade, status: updated.status, feedback: updated.feedback }
@@ -180,7 +164,43 @@ export default function AssignmentPanel({ unitId }: { unitId: string }) {
     } finally {
       setAiLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    fetch(`/api/assignments/unit/${unitId}`)
+      .then(r => r.json())
+      .then((d: AssignmentData & { error?: string }) => {
+        // Treat API error responses as "no assignment"
+        if (!d || d.error) { setData(null); return }
+        setData(d)
+        // If existing submission already has AI feedback, parse and show it
+        if (d?.submission?.feedback) {
+          const parsed = parseAiFeedback(d.submission.feedback)
+          if (parsed) setAiFeedback(parsed)
+        }
+      })
+      .catch((err) => {
+        console.error('[AssignmentPanel] fetch error:', err)
+        setData(null)
+      })
+  }, [unitId])
+
+  /* ── Trigger AI feedback on load if submission exists without feedback.
+     MUST be before the early return to avoid Rules of Hooks violation. ── */
+  useEffect(() => {
+    const sub = data?.submission
+    if (sub?.id && !sub.feedback && sub.textSubmission) {
+      requestAiFeedback(sub.id)
+    }
+  // requestAiFeedback is stable (useCallback with []), data?.submission?.id changes when submission loads
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.submission?.id])
+
+  // All hooks above — safe to early-return now
+  if (data === undefined || data === null) return null
+
+  const sub = data.submission
+  const alreadySubmitted = !!sub
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -207,14 +227,6 @@ export default function AssignmentPanel({ unitId }: { unitId: string }) {
     // Trigger AI feedback immediately after submission (text only)
     if (payload) requestAiFeedback(result.id)
   }
-
-  /* ── Also trigger AI feedback if sub exists without it (on load) ── */
-  useEffect(() => {
-    if (sub && sub.id && !sub.feedback && tab !== 'file' && sub.textSubmission) {
-      requestAiFeedback(sub.id)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sub?.id])
 
   const isAutoReviewed = sub?.status === 'auto_reviewed'
   const isHumanReviewed = sub?.status === 'reviewed'

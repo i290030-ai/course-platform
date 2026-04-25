@@ -129,7 +129,11 @@ export default function UnitPage({ params }: { params: { id: string } }) {
     fetch(`/api/unit/${params.id}`)
       .then(r => r.json())
       .then((data: ApiUnit & { error?: string }) => {
-        if (data.error) { setError(data.error); return }
+        if (data.error) {
+          console.error('[UnitPage] unit locked or not found:', data.error)
+          setError(data.error)
+          return
+        }
         setUnit(data)
         setCompleted(data.completed ?? false)
         // Load sibling units + course title in parallel
@@ -139,9 +143,14 @@ export default function UnitPage({ params }: { params: { id: string } }) {
         ]).then(([units, course]) => {
           setCourseUnits(Array.isArray(units) ? units : [])
           if (course?.title) setCourseTitle(course.title)
+        }).catch((err) => {
+          console.error('[UnitPage] sibling/course fetch error:', err)
         })
       })
-      .catch(() => setError('שגיאה בטעינת היחידה'))
+      .catch((err) => {
+        console.error('[UnitPage] fetch error:', err)
+        setError('שגיאה בטעינת היחידה')
+      })
   }, [status, params.id])
 
   const handleComplete = async () => {
