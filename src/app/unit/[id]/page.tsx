@@ -2,7 +2,7 @@
 import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import UnitTemplate, { UnitResource } from '@/components/UnitTemplate'
+import UnitTemplate, { UnitResource, SidebarUnit } from '@/components/UnitTemplate'
 
 /* ─────────────────────────────────────────
    Raw unit shape from the API
@@ -104,8 +104,14 @@ function parseUnitContent(raw: string | null | undefined): Parsed {
 /* ─────────────────────────────────────────
    Page
 ───────────────────────────────────────── */
+function estimateMinutes(parsed: Parsed, hasVideo: boolean): number {
+  const words = [parsed.mainContent, ...parsed.objectives].join(' ').split(/\s+/).filter(Boolean).length
+  const readingMins = Math.ceil(words / 180)
+  return Math.max(5, readingMins + (hasVideo ? 8 : 0) + (parsed.assignment ? 5 : 0))
+}
+
 export default function UnitPage({ params }: { params: { id: string } }) {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
   const [unit, setUnit] = useState<ApiUnit | null>(null)
   const [courseUnits, setCourseUnits] = useState<ApiUnit[]>([])
@@ -188,8 +194,16 @@ export default function UnitPage({ params }: { params: { id: string } }) {
     resources.push({ label: 'הצטרף לשיעור זום', url: unit.zoomLink, type: 'zoom' })
   }
 
-  /* Estimate progress */
+  /* Derived values */
   const progress = completed ? 100 : 25
+  const estimatedMins = estimateMinutes(parsed, !!parsed.videoUrl)
+  const sidebarUnits: SidebarUnit[] = courseUnits.map(u => ({
+    id: u.id,
+    title: u.title,
+    orderIndex: u.orderIndex ?? 0,
+    locked: (u as any).locked === true,
+    completed: u.completed === true,
+  }))
 
   return (
     <UnitTemplate
@@ -198,6 +212,7 @@ export default function UnitPage({ params }: { params: { id: string } }) {
       courseTitle={courseTitle}
       title={unit.title}
       orderIndex={unit.orderIndex}
+      estimatedMinutes={estimatedMins}
       objectives={parsed.objectives}
       videoUrl={parsed.videoUrl}
       content={parsed.mainContent}
@@ -208,6 +223,7 @@ export default function UnitPage({ params }: { params: { id: string } }) {
       completed={completed}
       nextUnitId={nextUnitId}
       nextUnitLocked={nextUnitLocked}
+      courseUnits={sidebarUnits}
       onComplete={handleComplete}
     />
   )
