@@ -34,6 +34,11 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
+        if (!user.isActive) {
+          console.warn('[auth] account deactivated:', credentials.email)
+          return null
+        }
+
         const passwordMatch = await bcrypt.compare(credentials.password, user.password)
         if (!passwordMatch) {
           console.warn('[auth] wrong password for:', credentials.email)
