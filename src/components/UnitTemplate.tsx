@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import AssignmentPanel from './AssignmentPanel'
 import Header from './Header'
@@ -17,7 +17,7 @@ export interface UnitTemplateProps {
   /* meta */
   unitId: string
   courseId: string
-  courseTitle?: string   // used in breadcrumb
+  courseTitle?: string
   title: string
   description?: string
   orderIndex?: number
@@ -29,7 +29,7 @@ export interface UnitTemplateProps {
   assignment?: string
   resources?: UnitResource[]
   /* state */
-  progress?: number          // 0-100
+  progress?: number
   completed?: boolean
   nextUnitId?: string | null
   nextUnitLocked?: boolean
@@ -39,9 +39,128 @@ export interface UnitTemplateProps {
 }
 
 /* ─────────────────────────────────────────
-   Small atoms
+   Step types
 ───────────────────────────────────────── */
+type StepId = 'objectives' | 'content' | 'practice' | 'assignment'
+type StepState = 'done' | 'active' | 'upcoming'
 
+interface Step {
+  id: StepId
+  label: string
+  icon: string
+}
+
+/* ─────────────────────────────────────────
+   Step progress rail
+───────────────────────────────────────── */
+function StepRail({
+  steps,
+  stateFor,
+}: {
+  steps: Step[]
+  stateFor: (id: StepId) => StepState
+}) {
+  return (
+    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+      {steps.map((step, i) => {
+        const s = stateFor(step.id)
+        return (
+          <div key={step.id} className="flex items-center gap-1.5 shrink-0">
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold
+                transition-all duration-300 ${
+                s === 'done'
+                  ? 'bg-green-100 text-green-700'
+                  : s === 'active'
+                  ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
+                  : 'bg-gray-100 text-gray-400'
+              }`}
+            >
+              {s === 'done' ? (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <span>{step.icon}</span>
+              )}
+              <span>{step.label}</span>
+            </div>
+            {i < steps.length - 1 && (
+              <div className={`w-3 h-px shrink-0 ${s === 'done' ? 'bg-green-300' : 'bg-gray-200'}`} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────
+   Collapsible code block
+───────────────────────────────────────── */
+function PracticeContent({ text }: { text: string }) {
+  const [openIdx, setOpenIdx] = useState<number | null>(null)
+  const hasCode = text.includes('```')
+
+  if (!hasCode) {
+    return (
+      <div
+        className="text-gray-700 text-[15px] leading-8 whitespace-pre-line"
+        dangerouslySetInnerHTML={{ __html: text.replace(/\n/g, '<br/>') }}
+      />
+    )
+  }
+
+  // Split on fenced code blocks
+  const parts = text.split(/(```[\s\S]*?```)/g)
+
+  return (
+    <div className="space-y-3">
+      {parts.map((part, i) => {
+        if (part.startsWith('```') && part.endsWith('```')) {
+          const code = part.slice(3, -3).replace(/^\w*\n/, '').trimEnd()
+          const isOpen = openIdx === i
+          return (
+            <div key={i} className="rounded-2xl border border-teal-200 overflow-hidden shadow-sm">
+              <button
+                onClick={() => setOpenIdx(isOpen ? null : i)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-teal-50
+                  text-teal-700 text-xs font-extrabold hover:bg-teal-100 transition-colors"
+              >
+                <span className="flex items-center gap-2">💻 קוד לדוגמה</span>
+                <span className="flex items-center gap-1.5 text-teal-500">
+                  {isOpen ? 'סגור ▲' : 'פתח ▼'}
+                </span>
+              </button>
+              {isOpen && (
+                <pre className="bg-gray-950 text-green-300 text-xs p-5 overflow-x-auto leading-6 font-mono">
+                  {code}
+                </pre>
+              )}
+            </div>
+          )
+        }
+        const clean = part.trim()
+        if (!clean) return null
+        return (
+          <div
+            key={i}
+            className="text-gray-700 text-[15px] leading-8 whitespace-pre-line"
+            dangerouslySetInnerHTML={{
+              __html: clean
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br/>'),
+            }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────
+   Atoms
+───────────────────────────────────────── */
 function ProgressBar({ value, completed }: { value: number; completed: boolean }) {
   const pct = completed ? 100 : Math.min(100, Math.max(0, value))
   return (
@@ -123,7 +242,6 @@ function Tag({ children, color }: {
   )
 }
 
-/* resource icon */
 function resourceIcon(type: UnitResource['type']) {
   if (type === 'zoom') return '📹'
   if (type === 'file') return '📄'
@@ -133,7 +251,6 @@ function resourceIcon(type: UnitResource['type']) {
 /* ─────────────────────────────────────────
    Main Component
 ───────────────────────────────────────── */
-
 export default function UnitTemplate({
   unitId,
   courseId,
@@ -157,7 +274,58 @@ export default function UnitTemplate({
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(completed)
   const [videoPlaying, setVideoPlaying] = useState(false)
+  const [showStickyBar, setShowStickyBar] = useState(false)
+  const [justCompleted, setJustCompleted] = useState(false)
 
+  /* Section visibility tracking */
+  const [seenSteps, setSeenSteps] = useState<Set<StepId>>(new Set())
+  const [activeStep, setActiveStep] = useState<StepId | null>(null)
+
+  /* Refs */
+  const heroRef = useRef<HTMLDivElement>(null)
+  const objectivesRef = useRef<HTMLElement>(null)
+  const contentRef = useRef<HTMLElement>(null)
+  const practiceRef = useRef<HTMLElement>(null)
+  const assignmentRef = useRef<HTMLElement>(null)
+
+  /* Section visibility - IntersectionObserver */
+  useEffect(() => {
+    const sections: [React.RefObject<HTMLElement | null>, StepId][] = [
+      [objectivesRef, 'objectives'],
+      [contentRef,    'content'],
+      [practiceRef,   'practice'],
+      [assignmentRef, 'assignment'],
+    ]
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute('data-step') as StepId | null
+          if (!id) return
+          if (entry.isIntersecting) {
+            setActiveStep(id)
+            setSeenSteps(prev => { const next = new Set(prev); next.add(id); return next })
+          }
+        })
+      },
+      { threshold: 0.25, rootMargin: '-80px 0px 0px 0px' }
+    )
+
+    sections.forEach(([ref]) => { if (ref.current) observer.observe(ref.current) })
+    return () => observer.disconnect()
+  }, [])
+
+  /* Sticky bar - show after hero scrolls out of view */
+  useEffect(() => {
+    const onScroll = () => {
+      const heroBottom = heroRef.current?.getBoundingClientRect().bottom ?? 0
+      setShowStickyBar(heroBottom < 0)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  /* Derived */
   const ytIdMatch = videoUrl?.match(/(?:embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/)
   const ytId = ytIdMatch?.[1] ?? null
   const hasVideo = !!ytId
@@ -169,7 +337,6 @@ export default function UnitTemplate({
   let stepCount = 0
   const nextStep = () => ++stepCount
 
-  /* step accent colours — declare once, reuse */
   const stepAccents = {
     objectives: 'bg-amber-50 text-amber-500',
     content:    'bg-indigo-50 text-indigo-500',
@@ -178,28 +345,51 @@ export default function UnitTemplate({
     resources:  'bg-gray-50 text-gray-500',
   }
 
+  /* Build step rail data */
+  const railSteps: Step[] = [
+    ...(hasObjectives ? [{ id: 'objectives' as StepId, label: 'מה לומדים', icon: '🎯' }] : []),
+    { id: 'content' as StepId, label: 'תוכן', icon: '📘' },
+    ...(hasPractice ? [{ id: 'practice' as StepId, label: 'תרגול', icon: '🧠' }] : []),
+    ...(hasAssignment ? [{ id: 'assignment' as StepId, label: 'משימה', icon: '📝' }] : []),
+  ]
+
+  const stateFor = useCallback((id: StepId): StepState => {
+    if (done) return 'done'
+    const railIdx = railSteps.findIndex(s => s.id === id)
+    const activeIdx = railSteps.findIndex(s => s.id === activeStep)
+    if (seenSteps.has(id) && railIdx < activeIdx) return 'done'
+    if (id === activeStep || (activeStep === null && railIdx === 0)) return 'active'
+    if (seenSteps.has(id)) return 'done'
+    return 'upcoming'
+  }, [done, seenSteps, activeStep, railSteps])
+
+  /* Complete handler */
   const handleComplete = async () => {
     if (saving || done) return
     setSaving(true)
-    try { await onComplete?.() } finally { setDone(true); setSaving(false) }
+    try {
+      await onComplete?.()
+    } finally {
+      setDone(true)
+      setJustCompleted(true)
+      setSaving(false)
+      // Scroll to completion section
+      setTimeout(() => {
+        document.getElementById('unit-completion')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 200)
+    }
   }
 
-  /* ── Spinner ── */
   const Spinner = () => (
     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
   )
 
-  /* ── CTA button ── */
-  function CompleteCTA({ variant = 'indigo' }: { variant?: 'indigo' | 'rose' | 'green' }) {
-    const map = {
-      indigo: 'from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700',
-      rose:   'from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700',
-      green:  'from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700',
-    }
+  /* ─── Main CTA button (used in multiple places) ─── */
+  function CompleteButton({ size = 'md' }: { size?: 'md' | 'lg' }) {
     if (done) {
       return (
-        <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 font-bold
-          px-5 py-2.5 rounded-2xl text-sm border border-green-200">
+        <span className={`inline-flex items-center gap-2 bg-green-100 text-green-700 font-bold
+          rounded-2xl border border-green-200 ${size === 'lg' ? 'px-7 py-3 text-base' : 'px-5 py-2.5 text-sm'}`}>
           <CheckIcon /> הושלם
         </span>
       )
@@ -208,11 +398,12 @@ export default function UnitTemplate({
       <button
         onClick={handleComplete}
         disabled={saving}
-        className={`inline-flex items-center gap-2 bg-gradient-to-l ${map[variant]}
-          text-white font-extrabold px-6 py-2.5 rounded-2xl shadow-md hover:shadow-lg
-          active:scale-95 transition-all duration-200 disabled:opacity-60 text-sm`}
+        className={`inline-flex items-center gap-2 bg-gradient-to-l from-indigo-600 to-purple-600
+          hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold rounded-2xl shadow-md
+          hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-60
+          ${size === 'lg' ? 'px-8 py-3.5 text-base' : 'px-6 py-2.5 text-sm'}`}
       >
-        {saving ? <><Spinner />שומר...</> : <><CheckIcon />סיימתי את היחידה</>}
+        {saving ? <><Spinner />שומר...</> : <><CheckIcon size={4} />סיימתי יחידה</>}
       </button>
     )
   }
@@ -224,11 +415,11 @@ export default function UnitTemplate({
     <div dir="rtl" className="min-h-screen bg-[#f5f6fa]">
       <Header />
 
-      {/* ══ SECTION 0 — HERO ══════════════════════════════════════ */}
-      <div className="bg-white border-b border-gray-100 shadow-sm">
+      {/* ══ HERO ════════════════════════════════════════════════════ */}
+      <div ref={heroRef} className="bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-3xl mx-auto px-5 py-8">
 
-          {/* top row: breadcrumb + status */}
+          {/* Breadcrumb + tags */}
           <div className="flex justify-between items-center mb-5">
             <nav className="flex items-center gap-2 text-sm text-gray-400 min-w-0">
               <Link href="/dashboard" className="hover:text-indigo-600 font-medium transition-colors shrink-0">
@@ -246,14 +437,14 @@ export default function UnitTemplate({
                 </>
               )}
             </nav>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {hasVideo && <Tag color="purple">🎬 סרטון</Tag>}
               {hasAssignment && <Tag color="rose">📝 משימה</Tag>}
               {done && <Tag color="green">✓ הושלם</Tag>}
             </div>
           </div>
 
-          {/* title block */}
+          {/* Title + CTA */}
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5">
             <div className="flex-1 min-w-0">
               {orderIndex !== undefined && (
@@ -270,27 +461,38 @@ export default function UnitTemplate({
               )}
             </div>
             <div className="shrink-0 sm:pt-1">
-              <CompleteCTA variant="indigo" />
+              <CompleteButton />
             </div>
           </div>
 
-          {/* progress bar */}
+          {/* Progress bar */}
           <div className="mt-6">
             <ProgressBar value={progress} completed={done} />
           </div>
+
+          {/* Step rail */}
+          {railSteps.length > 0 && (
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <StepRail steps={railSteps} stateFor={stateFor} />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ══ FLOW BODY ══════════════════════════════════════════════ */}
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-3">
+      {/* ══ FLOW BODY ═══════════════════════════════════════════════ */}
+      <div className="max-w-3xl mx-auto px-4 py-8 space-y-3 pb-24">
 
         {/* ── STEP 1: OBJECTIVES ─────────────────────────────────── */}
         {hasObjectives && (() => {
           const step = nextStep()
           return (
             <>
-              <section className="bg-white rounded-3xl border border-amber-100 shadow-sm overflow-hidden
-                transition-all duration-200 hover:shadow-md">
+              <section
+                ref={objectivesRef}
+                data-step="objectives"
+                className="bg-white rounded-3xl border border-amber-100 shadow-sm overflow-hidden
+                  transition-all duration-200 hover:shadow-md"
+              >
                 <div className="h-0.5 bg-gradient-to-l from-amber-300 to-yellow-300" />
                 <div className="p-7">
                   <div className="mb-5">
@@ -319,8 +521,12 @@ export default function UnitTemplate({
           const step = nextStep()
           return (
             <>
-              <section className="bg-white rounded-3xl border border-indigo-100 shadow-sm overflow-hidden
-                transition-all duration-200 hover:shadow-md">
+              <section
+                ref={contentRef}
+                data-step="content"
+                className="bg-white rounded-3xl border border-indigo-100 shadow-sm overflow-hidden
+                  transition-all duration-200 hover:shadow-md"
+              >
                 <div className="h-0.5 bg-gradient-to-l from-indigo-400 to-blue-400" />
                 <div className="p-7">
                   <div className="mb-5">
@@ -329,7 +535,6 @@ export default function UnitTemplate({
 
                   {hasVideo ? (
                     <div className="space-y-5">
-                      {/* Video player */}
                       <div className="rounded-2xl overflow-hidden bg-gray-950 aspect-video shadow-lg">
                         {!videoPlaying ? (
                           <button
@@ -346,7 +551,6 @@ export default function UnitTemplate({
                               }}
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/5 to-transparent" />
-                            {/* Play button */}
                             <div className="relative w-20 h-20 bg-white/95 group-hover:bg-white rounded-full
                               flex items-center justify-center shadow-2xl transition-all duration-200 group-hover:scale-110">
                               <svg className="w-8 h-8 text-indigo-600 mr-[-3px]" fill="currentColor" viewBox="0 0 20 20">
@@ -364,8 +568,6 @@ export default function UnitTemplate({
                           />
                         )}
                       </div>
-
-                      {/* Transcript / notes */}
                       {content && (
                         <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">📝 הערות</p>
@@ -377,7 +579,6 @@ export default function UnitTemplate({
                       )}
                     </div>
                   ) : (
-                    /* No video — show full content */
                     <div className="bg-slate-50 rounded-2xl px-7 py-6 border border-slate-100">
                       <div
                         className="text-gray-700 text-[15px] leading-8 whitespace-pre-line"
@@ -397,20 +598,20 @@ export default function UnitTemplate({
           const step = nextStep()
           return (
             <>
-              <section className="bg-white rounded-3xl border border-teal-100 shadow-sm overflow-hidden
-                transition-all duration-200 hover:shadow-md">
+              <section
+                ref={practiceRef}
+                data-step="practice"
+                className="bg-white rounded-3xl border border-teal-100 shadow-sm overflow-hidden
+                  transition-all duration-200 hover:shadow-md"
+              >
                 <div className="h-0.5 bg-gradient-to-l from-teal-400 to-emerald-400" />
                 <div className="p-7">
                   <div className="mb-5">
                     <SectionDivider icon="🧠" title="תרגול ופעילות" step={step} accent={stepAccents.practice} />
                   </div>
                   <div className="bg-teal-50/60 rounded-2xl p-5 border border-teal-100">
-                    <div
-                      className="text-gray-700 text-[15px] leading-8 whitespace-pre-line"
-                      dangerouslySetInnerHTML={{ __html: practice!.replace(/\n/g, '<br/>') }}
-                    />
+                    <PracticeContent text={practice!} />
                   </div>
-                  {/* Reflection textarea */}
                   <div className="mt-4">
                     <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
                       ✏️ הרשומות שלי
@@ -435,24 +636,23 @@ export default function UnitTemplate({
           const step = nextStep()
           return (
             <>
-              <section className="relative rounded-3xl border-2 border-rose-200 shadow-md overflow-hidden
-                transition-all duration-200 hover:shadow-lg bg-white">
-                {/* Side accent stripe */}
+              <section
+                ref={assignmentRef}
+                data-step="assignment"
+                className="relative rounded-3xl border-2 border-rose-200 shadow-md overflow-hidden
+                  transition-all duration-200 hover:shadow-lg bg-white"
+              >
                 <div className="absolute top-0 right-0 bottom-0 w-1.5 bg-gradient-to-b from-rose-400 to-pink-500 rounded-tr-3xl rounded-br-3xl" />
                 <div className="h-0.5 bg-gradient-to-l from-rose-400 to-pink-400" />
                 <div className="p-7 pr-10">
                   <div className="mb-4">
                     <SectionDivider icon="📝" title="משימה לביצוע" step={step} accent={stepAccents.assignment} />
                   </div>
-
-                  {/* Urgency label */}
                   <div className="inline-flex items-center gap-2 bg-rose-100 text-rose-600 text-xs
                     font-extrabold px-3 py-1.5 rounded-full mb-5 border border-rose-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
                     נדרשת השלמה לפני המעבר ליחידה הבאה
                   </div>
-
-                  {/* Assignment body */}
                   <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-6
                     border border-rose-100 mb-6">
                     <div
@@ -460,12 +660,8 @@ export default function UnitTemplate({
                       dangerouslySetInnerHTML={{ __html: assignment!.replace(/\n/g, '<br/>') }}
                     />
                   </div>
-
-                  {/* CTA row */}
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-gray-400 text-sm">
-                      לאחר ביצוע המשימה, סמן את היחידה כהושלמה
-                    </p>
+                    <p className="text-gray-400 text-sm">לאחר ביצוע המשימה, סמן את היחידה כהושלמה</p>
                     {!done ? (
                       <div className="flex items-center gap-3">
                         {onSubmitAssignment && (
@@ -486,9 +682,7 @@ export default function UnitTemplate({
                             rounded-2xl shadow-md hover:shadow-lg active:scale-95 transition-all duration-200
                             disabled:opacity-60 text-sm"
                         >
-                          {saving
-                            ? <><Spinner />שומר...</>
-                            : <><CheckIcon />בצע משימה</>}
+                          {saving ? <><Spinner />שומר...</> : <><CheckIcon />בצע משימה</>}
                         </button>
                       </div>
                     ) : (
@@ -529,8 +723,7 @@ export default function UnitTemplate({
                         {resourceIcon(res.type)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-700 group-hover:text-indigo-700
-                          truncate transition-colors">
+                        <p className="text-sm font-semibold text-gray-700 group-hover:text-indigo-700 truncate transition-colors">
                           {res.label}
                         </p>
                         <p className="text-xs text-gray-400 truncate">{res.url}</p>
@@ -552,16 +745,19 @@ export default function UnitTemplate({
         <AssignmentPanel unitId={unitId} />
 
         {/* ── COMPLETION / NAVIGATION ────────────────────────────── */}
-        <section className={`rounded-3xl p-8 text-center border transition-all duration-500 ${
-          done
-            ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200 shadow-sm'
-            : 'bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-indigo-100'
-        }`}>
+        <section
+          id="unit-completion"
+          className={`rounded-3xl p-8 text-center border transition-all duration-500 ${
+            done
+              ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200 shadow-sm'
+              : 'bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-indigo-100'
+          }`}
+        >
           {done ? (
-            /* ── Completed state ── */
-            <div className="flex flex-col items-center gap-4">
+            <div className={`flex flex-col items-center gap-4 ${justCompleted ? 'animate-bounce-once' : ''}`}>
               <div className="relative">
-                <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center shadow-xl">
+                <div className={`w-20 h-20 bg-green-500 rounded-full flex items-center justify-center shadow-xl
+                  ${justCompleted ? 'animate-scale-in' : ''}`}>
                   <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
@@ -569,6 +765,7 @@ export default function UnitTemplate({
                 <span className="absolute -top-1 -left-1 w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center text-sm shadow">🌟</span>
               </div>
               <div>
+                <p className="text-4xl mb-1">🎉</p>
                 <h3 className="text-2xl font-extrabold text-green-800">כל הכבוד!</h3>
                 <p className="text-green-600 text-sm mt-1">השלמת את היחידה בהצלחה. המשך כך!</p>
               </div>
@@ -579,7 +776,7 @@ export default function UnitTemplate({
                     font-extrabold px-7 py-3 rounded-2xl shadow-md hover:shadow-lg active:scale-95
                     transition-all duration-200 text-sm"
                 >
-                  ליחידה הבאה
+                  המשך ליחידה הבאה
                   <svg className="w-4 h-4 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
@@ -604,7 +801,6 @@ export default function UnitTemplate({
               )}
             </div>
           ) : (
-            /* ── Not yet completed ── */
             <div className="flex flex-col items-center gap-4">
               <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-3xl shadow-md border border-indigo-100">
                 🏁
@@ -617,20 +813,72 @@ export default function UnitTemplate({
                 onClick={handleComplete}
                 disabled={saving}
                 className="flex items-center gap-2 bg-gradient-to-l from-indigo-600 to-purple-600
-                  hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold px-8 py-3
+                  hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold px-8 py-3.5
                   rounded-2xl shadow-md hover:shadow-lg active:scale-95 transition-all duration-200
-                  disabled:opacity-60 text-sm"
+                  disabled:opacity-60 text-base"
               >
                 {saving
                   ? <><Spinner />שומר...</>
-                  : <><CheckIcon size={4} />סיימתי את היחידה</>}
+                  : <><CheckIcon size={4} />סיימתי יחידה</>}
               </button>
             </div>
           )}
         </section>
 
       </div>
+
+      {/* ══ STICKY BOTTOM BAR ═══════════════════════════════════════ */}
+      <div
+        className={`fixed bottom-0 inset-x-0 z-50 transition-all duration-300 ${
+          showStickyBar ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="bg-white/90 backdrop-blur-md border-t border-gray-200 shadow-2xl">
+          <div className="max-w-3xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-gray-400 truncate">
+                {orderIndex !== undefined ? `יחידה ${orderIndex + 1}` : 'יחידה נוכחית'}
+              </p>
+              <p className="text-sm font-extrabold text-gray-800 truncate">{title}</p>
+            </div>
+            <div className="shrink-0">
+              {done ? (
+                nextUnitId && !nextUnitLocked ? (
+                  <Link
+                    href={`/unit/${nextUnitId}`}
+                    className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700
+                      text-white font-extrabold px-5 py-2.5 rounded-2xl shadow-md text-sm
+                      active:scale-95 transition-all duration-200"
+                  >
+                    המשך ליחידה הבאה →
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/course/${courseId}`}
+                    className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700
+                      text-white font-extrabold px-5 py-2.5 rounded-2xl shadow-md text-sm
+                      active:scale-95 transition-all duration-200"
+                  >
+                    חזור לקורס →
+                  </Link>
+                )
+              ) : (
+                <button
+                  onClick={handleComplete}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 bg-gradient-to-l from-indigo-600 to-purple-600
+                    hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold px-5 py-2.5
+                    rounded-2xl shadow-md text-sm active:scale-95 transition-all duration-200
+                    disabled:opacity-60"
+                >
+                  {saving ? <><Spinner />שומר...</> : <><CheckIcon size={4} />סיימתי יחידה</>}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   )
-
 }
