@@ -1132,6 +1132,11 @@ export default function AdminDashboard() {
         </nav>
 
         <div className="px-3 py-4 border-t border-gray-100 space-y-0.5">
+          <Link href="/admin"
+            className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-bold
+              text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors">
+            <span>🏠</span> חזרה לניהול
+          </Link>
           <Link href="/dashboard"
             className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
             <span>🏫</span> פורטל תלמיד
@@ -1148,10 +1153,6 @@ export default function AdminDashboard() {
               </Link>
             </>
           )}
-          <Link href="/admin"
-            className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-            <span>⚙️</span> הגדרות
-          </Link>
           <button onClick={() => signOut({ callbackUrl: '/login' })}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
             <span>🚪</span> יציאה

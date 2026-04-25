@@ -44,7 +44,7 @@ export default function Header() {
           {isAdminRole(role) && (
             <Link
               href="/admin"
-              className="hidden md:inline-flex items-center gap-1.5 text-sm font-semibold
+              className="inline-flex items-center gap-1.5 text-sm font-semibold
                 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors
                 px-3 py-1.5 rounded-lg border border-indigo-200 whitespace-nowrap">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
