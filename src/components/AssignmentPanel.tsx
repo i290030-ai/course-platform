@@ -31,6 +31,7 @@ export default function AssignmentPanel({ unitId }: Props) {
   const [tab, setTab] = useState<'text' | 'file'>('text')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [justSubmitted, setJustSubmitted] = useState(false)
 
   useEffect(() => {
     fetch(`/api/assignments/unit/${unitId}`)
@@ -67,6 +68,8 @@ export default function AssignmentPanel({ unitId }: Props) {
 
     if (!res.ok) { setError(result.error || 'שגיאה בשליחה'); return }
     setData({ ...data, submission: result })
+    setJustSubmitted(true)
+    setTimeout(() => setJustSubmitted(false), 5000)
   }
 
   const statusLabel = sub?.status === 'reviewed' ? 'נבדק' : 'הוגש'
@@ -126,6 +129,17 @@ export default function AssignmentPanel({ unitId }: Props) {
         {/* ── Already submitted ── */}
         {alreadySubmitted ? (
           <div className="space-y-4">
+            {/* Just-submitted confirmation banner */}
+            {justSubmitted && (
+              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-2xl px-5 py-3.5 text-green-700">
+                <span className="text-xl shrink-0">✅</span>
+                <div>
+                  <p className="font-extrabold text-sm">המשימה הוגשה בהצלחה!</p>
+                  <p className="text-xs text-green-600 mt-0.5">המורה יבדוק את הגשתך בקרוב</p>
+                </div>
+              </div>
+            )}
+
             {/* Submission preview */}
             <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">ההגשה שלך</p>
@@ -169,9 +183,18 @@ export default function AssignmentPanel({ unitId }: Props) {
             )}
 
             {sub.status === 'submitted' && (
-              <div className="flex items-center gap-2 text-blue-600 text-sm bg-blue-50 rounded-2xl p-4 border border-blue-100">
-                <span className="text-lg">⏳</span>
-                המשימה הוגשה ומחכה לבדיקה
+              <div className="flex items-center justify-between gap-3 bg-blue-50 rounded-2xl p-4 border border-blue-100">
+                <div className="flex items-center gap-2 text-blue-700 text-sm font-semibold">
+                  <span className="text-lg">⏳</span>
+                  המשימה הוגשה ומחכה לבדיקה
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold
+                    bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    הוגש · בבדיקה
+                  </span>
+                </div>
               </div>
             )}
           </div>

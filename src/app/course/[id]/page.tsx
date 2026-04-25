@@ -150,8 +150,12 @@ function UnitCard({ unit, isCurrent }: { unit: Unit; isCurrent: boolean }) {
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse inline-block" />
               ממשיך עכשיו
             </span>}
-            {state === 'available' && <span className="text-gray-400">זמין</span>}
-            {state === 'locked'    && <span className="text-gray-400">נעול</span>}
+            {state === 'available' && <span className="text-gray-400">זמין ללמידה</span>}
+            {state === 'locked'    && (
+              <span className="text-gray-400 flex items-center gap-1">
+                השלם את היחידה הקודמת כדי לפתוח
+              </span>
+            )}
           </p>
         </div>
 
@@ -181,7 +185,7 @@ function UnitCard({ unit, isCurrent }: { unit: Unit; isCurrent: boolean }) {
    Main page
 ───────────────────────────────────────── */
 export default function CoursePage({ params }: { params: { id: string } }) {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
   const [course, setCourse] = useState<Course | null>(null)
   const [units, setUnits] = useState<Unit[]>([])
@@ -292,6 +296,33 @@ export default function CoursePage({ params }: { params: { id: string } }) {
               </div>
             </div>
           </div>
+
+          {/* Course completion celebration */}
+          {pct === 100 && (
+            <div className="mb-6 rounded-2xl overflow-hidden border-2 border-green-200 shadow-sm">
+              <div className="h-1 bg-gradient-to-l from-green-400 to-emerald-500" />
+              <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-8 text-center">
+                <p className="text-5xl mb-3">🎉</p>
+                <h2 className="text-2xl font-extrabold text-green-800 mb-1">סיימת את הקורס!</h2>
+                <p className="text-green-600 text-sm mb-6">כל הכבוד! השלמת את כל {totalUnits} היחידות בהצלחה.</p>
+                {/* Certificate placeholder */}
+                <div className="inline-flex items-center gap-4 bg-white rounded-2xl border border-green-100
+                  shadow-sm px-6 py-4 text-right">
+                  <div className="w-12 h-12 bg-yellow-100 rounded-2xl flex items-center justify-center text-2xl shrink-0">
+                    🏆
+                  </div>
+                  <div>
+                    <p className="font-extrabold text-gray-800 text-sm">תעודת סיום</p>
+                    <p className="text-xs text-gray-400 mt-0.5">תכונה זו תהיה זמינה בקרוב</p>
+                  </div>
+                  <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200
+                    px-2.5 py-1 rounded-full shrink-0">
+                    בקרוב
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Units list */}
           <div className="mb-4 flex items-center justify-between">

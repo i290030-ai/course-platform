@@ -73,10 +73,17 @@ function ProgressBar({ pct, active }: { pct: number; active?: boolean }) {
   )
 }
 
+const SECTION_LABELS: Record<string, string> = {
+  'section-objectives': 'מה לומדים',
+  'section-content':    'תוכן',
+  'section-practice':   'תרגול',
+  'section-assignment': 'משימה',
+}
+
 /* ─────────────────────────────────────────
    CTA button
 ───────────────────────────────────────── */
-function CtaButton({ course }: { course: CourseProgress }) {
+function CtaButton({ course, resumeSection }: { course: CourseProgress; resumeSection?: string }) {
   if (course.pct === 100) {
     return (
       <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 border
@@ -88,10 +95,12 @@ function CtaButton({ course }: { course: CourseProgress }) {
   }
 
   const href = course.currentUnit ? `/unit/${course.currentUnit.id}` : `/course/${course.id}`
+  const hasResume = !!resumeSection && course.pct > 0
   const label = course.pct === 0
     ? 'התחל קורס'
+    : hasResume
+    ? 'המשך מהמקום שהפסקת'
     : `המשך יחידה ${course.currentUnit ? course.currentUnit.orderIndex + 1 : ''}`
-  const icon = course.pct === 0 ? '▶' : '→'
 
   return (
     <Link href={href}
@@ -99,7 +108,7 @@ function CtaButton({ course }: { course: CourseProgress }) {
         active:scale-95 text-white text-sm font-bold px-4 py-2 rounded-xl
         transition-all duration-150 shadow-sm hover:shadow-md">
       {label}
-      <span className="text-xs opacity-80">{icon}</span>
+      <span className="text-xs opacity-80">{course.pct === 0 ? '▶' : '→'}</span>
     </Link>
   )
 }
@@ -107,7 +116,7 @@ function CtaButton({ course }: { course: CourseProgress }) {
 /* ─────────────────────────────────────────
    Course card
 ───────────────────────────────────────── */
-function CourseCard({ course, active }: { course: CourseProgress; active: boolean }) {
+function CourseCard({ course, active, resumeSection }: { course: CourseProgress; active: boolean; resumeSection?: string }) {
   return (
     <div className={`
       bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col
@@ -170,12 +179,20 @@ function CourseCard({ course, active }: { course: CourseProgress; active: boolea
           </div>
         )}
 
-        {/* Current unit hint */}
+        {/* Current unit + resume section hint */}
         {course.currentUnit && course.pct > 0 && course.pct < 100 && (
-          <p className="text-xs text-gray-400 flex items-center gap-1.5 -mt-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
-            עכשיו: <span className="text-gray-600 font-semibold truncate">{course.currentUnit.title}</span>
-          </p>
+          <div className="space-y-1 -mt-1">
+            <p className="text-xs text-gray-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+              יחידה: <span className="text-gray-600 font-semibold truncate">{course.currentUnit.title}</span>
+            </p>
+            {resumeSection && SECTION_LABELS[resumeSection] && (
+              <p className="text-xs text-indigo-400 flex items-center gap-1.5 pr-3">
+                <span className="shrink-0">↳</span>
+                עצרת ב: <span className="font-semibold">{SECTION_LABELS[resumeSection]}</span>
+              </p>
+            )}
+          </div>
         )}
 
         {/* CTA */}
@@ -184,7 +201,7 @@ function CourseCard({ course, active }: { course: CourseProgress; active: boolea
             className="text-xs text-gray-400 hover:text-indigo-600 font-medium transition-colors">
             כל היחידות →
           </Link>
-          <CtaButton course={course} />
+          <CtaButton course={course} resumeSection={resumeSection} />
         </div>
       </div>
     </div>
@@ -203,6 +220,7 @@ export default function DashboardPage() {
   const role = session?.user?.role
   const isAdmin = isAdminRole(role)
   const name = session?.user?.name ?? ''
+  const [resumeSectionMap, setResumeSectionMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -212,7 +230,22 @@ export default function DashboardPage() {
     if (status !== 'authenticated') return
     fetch('/api/courses/progress')
       .then(r => r.json())
-      .then(data => { setCourses(Array.isArray(data) ? data : []); setLoading(false) })
+      .then(data => {
+        const list: CourseProgress[] = Array.isArray(data) ? data : []
+        setCourses(list)
+        setLoading(false)
+        // Read last-viewed section from localStorage for each in-progress course
+        try {
+          const map: Record<string, string> = {}
+          list.forEach(c => {
+            if (c.currentUnit && c.pct > 0 && c.pct < 100) {
+              const saved = localStorage.getItem(`unit-resume-${c.currentUnit.id}`)
+              if (saved) map[c.id] = saved
+            }
+          })
+          setResumeSectionMap(map)
+        } catch {}
+      })
   }, [status])
 
   // The "active" course: in-progress (pct > 0 && < 100), or first course if all at 0
@@ -279,6 +312,7 @@ export default function DashboardPage() {
               key={course.id}
               course={course}
               active={course.id === activeCourseId}
+              resumeSection={resumeSectionMap[course.id]}
             />
           ))}
         </div>
