@@ -144,6 +144,12 @@ export default function AdminCoursesPage() {
               </div>
               <div className="flex gap-2">
                 <Link
+                  href={`/admin/courses/${course.id}/participants`}
+                  className="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg text-sm hover:bg-indigo-100"
+                >
+                  משתתפים
+                </Link>
+                <Link
                   href={`/course/${course.id}`}
                   className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200"
                 >
