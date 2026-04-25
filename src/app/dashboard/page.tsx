@@ -1,90 +1,203 @@
 'use client'
 import { useSession } from 'next-auth/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import MainLayout from '@/components/MainLayout'
 import { isAdminRole } from '@/lib/roles'
 
-interface Course {
+/* ─────────────────────────────────────────
+   Types
+───────────────────────────────────────── */
+interface CourseProgress {
   id: string
   title: string
   description: string
   releaseMode: string
-  units?: { id: string }[]
+  totalUnits: number
+  completedUnits: number
+  pct: number
+  currentUnit: { id: string; title: string; orderIndex: number } | null
 }
 
-/* ── Skeleton card shown while loading ── */
+/* ─────────────────────────────────────────
+   Skeleton
+───────────────────────────────────────── */
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-pulse">
-      <div className="h-2 bg-gradient-to-l from-indigo-200 to-purple-200" />
-      <div className="p-6 space-y-3">
-        <div className="h-4 bg-gray-200 rounded-full w-3/4" />
-        <div className="h-3 bg-gray-100 rounded-full w-full" />
-        <div className="h-3 bg-gray-100 rounded-full w-5/6" />
-        <div className="flex justify-between items-center pt-2">
-          <div className="h-3 bg-gray-100 rounded-full w-16" />
-          <div className="h-8 bg-gray-200 rounded-xl w-24" />
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-pulse">
+      <div className="h-1.5 bg-gradient-to-l from-gray-200 to-gray-100" />
+      <div className="p-6 space-y-4">
+        <div className="h-4 bg-gray-200 rounded-full w-2/3" />
+        <div className="space-y-2">
+          <div className="h-3 bg-gray-100 rounded-full w-full" />
+          <div className="h-3 bg-gray-100 rounded-full w-4/5" />
+        </div>
+        <div className="h-2 bg-gray-100 rounded-full w-full mt-2" />
+        <div className="flex justify-between items-center pt-1">
+          <div className="h-3 bg-gray-100 rounded-full w-20" />
+          <div className="h-9 bg-gray-200 rounded-xl w-28" />
         </div>
       </div>
     </div>
   )
 }
 
-/* ── Release mode label ── */
-function releaseLabel(mode: string) {
-  if (mode === 'date')       return 'שחרור לפי תאריך'
-  if (mode === 'sequential') return 'שחרור רציף'
-  return 'שחרור ידני'
+/* ─────────────────────────────────────────
+   Animated progress bar
+───────────────────────────────────────── */
+function ProgressBar({ pct, active }: { pct: number; active?: boolean }) {
+  const [width, setWidth] = useState(0)
+  const ref = useRef(false)
+
+  useEffect(() => {
+    if (ref.current) return
+    ref.current = true
+    const t = setTimeout(() => setWidth(pct), 120) // slight delay → animates in
+    return () => clearTimeout(t)
+  }, [pct])
+
+  const color = pct === 100
+    ? 'from-green-400 to-emerald-500'
+    : active
+    ? 'from-indigo-500 to-purple-500'
+    : 'from-indigo-400 to-indigo-500'
+
+  return (
+    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+      <div
+        className={`h-full rounded-full bg-gradient-to-l ${color} transition-all duration-700 ease-out`}
+        style={{ width: `${width}%` }}
+      />
+    </div>
+  )
 }
 
-/* ── Course card ── */
-function CourseCard({ course }: { course: Course }) {
-  const unitCount = course.units?.length ?? 0
+/* ─────────────────────────────────────────
+   CTA button
+───────────────────────────────────────── */
+function CtaButton({ course }: { course: CourseProgress }) {
+  if (course.pct === 100) {
+    return (
+      <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 border
+        border-green-200 text-sm font-bold px-4 py-2 rounded-xl cursor-default select-none">
+        <span className="text-base">✓</span>
+        הקורס הושלם
+      </span>
+    )
+  }
+
+  const href = course.currentUnit ? `/unit/${course.currentUnit.id}` : `/course/${course.id}`
+  const label = course.pct === 0
+    ? 'התחל קורס'
+    : `המשך יחידה ${course.currentUnit ? course.currentUnit.orderIndex + 1 : ''}`
+  const icon = course.pct === 0 ? '▶' : '→'
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden
-      hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
-      <div className="h-1.5 bg-gradient-to-l from-indigo-500 to-purple-600" />
-      <div className="p-6 flex flex-col flex-1">
-        <h3 className="text-base font-extrabold text-gray-900 mb-1.5 leading-snug">
-          {course.title}
-        </h3>
+    <Link href={href}
+      className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700
+        active:scale-95 text-white text-sm font-bold px-4 py-2 rounded-xl
+        transition-all duration-150 shadow-sm hover:shadow-md">
+      {label}
+      <span className="text-xs opacity-80">{icon}</span>
+    </Link>
+  )
+}
+
+/* ─────────────────────────────────────────
+   Course card
+───────────────────────────────────────── */
+function CourseCard({ course, active }: { course: CourseProgress; active: boolean }) {
+  return (
+    <div className={`
+      bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col
+      transition-all duration-200 ease-out
+      hover:-translate-y-1 hover:shadow-lg
+      ${active
+        ? 'border-indigo-300 ring-2 ring-indigo-200 ring-offset-1'
+        : 'border-gray-100 hover:border-indigo-100'}
+    `}>
+      {/* Top accent */}
+      <div className={`h-1.5 bg-gradient-to-l ${
+        course.pct === 100
+          ? 'from-green-400 to-emerald-500'
+          : active
+          ? 'from-indigo-500 to-purple-600'
+          : 'from-indigo-400 to-purple-500'
+      }`} />
+
+      <div className="p-6 flex flex-col flex-1 gap-4">
+
+        {/* Title + badge */}
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-base font-extrabold text-gray-900 leading-snug">
+            {course.title}
+          </h3>
+          {active && (
+            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-extrabold
+              uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-600 text-white
+              shadow-sm animate-pulse">
+              ממשיך עכשיו
+            </span>
+          )}
+          {course.pct === 100 && (
+            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-extrabold
+              uppercase tracking-wide px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+              ✓ הושלם
+            </span>
+          )}
+        </div>
+
+        {/* Description */}
         <p className="text-sm text-gray-500 leading-relaxed line-clamp-2 flex-1">
           {course.description}
         </p>
-        <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-50">
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            {unitCount > 0 && (
-              <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                {unitCount} יחידות
+
+        {/* Progress section */}
+        {course.totalUnits > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400 font-medium">
+                {course.completedUnits} מתוך {course.totalUnits} יחידות
               </span>
-            )}
-            <span>{releaseLabel(course.releaseMode)}</span>
+              <span className={`font-extrabold tabular-nums ${
+                course.pct === 100 ? 'text-green-600' : 'text-indigo-600'
+              }`}>
+                {course.pct}%
+              </span>
+            </div>
+            <ProgressBar pct={course.pct} active={active} />
           </div>
+        )}
+
+        {/* Current unit hint */}
+        {course.currentUnit && course.pct > 0 && course.pct < 100 && (
+          <p className="text-xs text-gray-400 flex items-center gap-1.5 -mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+            עכשיו: <span className="text-gray-600 font-semibold truncate">{course.currentUnit.title}</span>
+          </p>
+        )}
+
+        {/* CTA */}
+        <div className="flex items-center justify-between pt-2 border-t border-gray-50 mt-auto">
           <Link href={`/course/${course.id}`}
-            className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700
-              text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors shadow-sm">
-            המשך
-            <svg className="w-3.5 h-3.5 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            className="text-xs text-gray-400 hover:text-indigo-600 font-medium transition-colors">
+            כל היחידות →
           </Link>
+          <CtaButton course={course} />
         </div>
       </div>
     </div>
   )
 }
 
-/* ── Main page ── */
+/* ─────────────────────────────────────────
+   Main page
+───────────────────────────────────────── */
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [courses, setCourses] = useState<Course[]>([])
+  const [courses, setCourses] = useState<CourseProgress[]>([])
   const [loading, setLoading] = useState(true)
 
   const role = session?.user?.role
@@ -97,10 +210,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status !== 'authenticated') return
-    fetch('/api/courses')
+    fetch('/api/courses/progress')
       .then(r => r.json())
       .then(data => { setCourses(Array.isArray(data) ? data : []); setLoading(false) })
   }, [status])
+
+  // The "active" course: in-progress (pct > 0 && < 100), or first course if all at 0
+  const activeCourseId = (() => {
+    const inProgress = courses.find(c => c.pct > 0 && c.pct < 100)
+    if (inProgress) return inProgress.id
+    if (courses.length > 0 && courses.every(c => c.pct === 0)) return courses[0].id
+    return null
+  })()
+
+  const totalCompleted = courses.filter(c => c.pct === 100).length
 
   return (
     <MainLayout>
@@ -115,41 +238,49 @@ export default function DashboardPage() {
           </div>
           <Link href="/admin"
             className="shrink-0 inline-flex items-center gap-2 bg-white text-indigo-700
-              font-extrabold text-sm px-5 py-2.5 rounded-xl hover:bg-indigo-50 transition-colors shadow-sm">
-            עבור ללוח ניהול
-            <span className="text-lg">→</span>
+              font-extrabold text-sm px-5 py-2.5 rounded-xl hover:bg-indigo-50
+              transition-colors shadow-sm active:scale-95">
+            עבור ללוח ניהול →
           </Link>
         </div>
       )}
 
       {/* Section header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-end justify-between mb-6 gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">
             {name ? `שלום, ${name} 👋` : 'הקורסים שלי'}
           </h1>
           {!loading && courses.length > 0 && (
-            <p className="text-sm text-gray-400 mt-0.5">
-              {courses.length} {courses.length === 1 ? 'קורס' : 'קורסים'} פעילים
+            <p className="text-sm text-gray-400 mt-1">
+              {totalCompleted > 0
+                ? `${totalCompleted} מתוך ${courses.length} קורסים הושלמו`
+                : `${courses.length} ${courses.length === 1 ? 'קורס רשום' : 'קורסים רשומים'}`}
             </p>
           )}
         </div>
       </div>
 
-      {/* Course grid */}
+      {/* Grid */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           <SkeletonCard /><SkeletonCard /><SkeletonCard />
         </div>
       ) : courses.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center">
-          <p className="text-4xl mb-4">📚</p>
-          <p className="font-bold text-gray-700 text-lg">אין קורסים זמינים כרגע</p>
-          <p className="text-gray-400 text-sm mt-2">פנה למנהל לקבלת גישה לקורסים</p>
+          <p className="text-5xl mb-4">📚</p>
+          <p className="font-extrabold text-gray-700 text-lg mb-1">אין קורסים זמינים כרגע</p>
+          <p className="text-gray-400 text-sm">פנה למנהל לקבלת גישה לקורסים</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {courses.map(course => <CourseCard key={course.id} course={course} />)}
+          {courses.map(course => (
+            <CourseCard
+              key={course.id}
+              course={course}
+              active={course.id === activeCourseId}
+            />
+          ))}
         </div>
       )}
     </MainLayout>
