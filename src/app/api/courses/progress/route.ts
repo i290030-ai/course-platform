@@ -38,18 +38,21 @@ export async function GET() {
     const completedUnits = units.filter(u => completedIds.has(u.id)).length
     const pct = totalUnits > 0 ? Math.round((completedUnits / totalUnits) * 100) : 0
 
-    // Find the current unit: first accessible, non-completed unit
+    // Find the current unit: first accessible, non-completed unit.
+    // Returns null if all remaining units are locked (e.g. manual mode, nothing open yet).
     let currentUnit: { id: string; title: string; orderIndex: number } | null = null
     for (let i = 0; i < units.length; i++) {
       const unit = units[i]
-      if (completedIds.has(unit.id)) continue
+      if (completedIds.has(unit.id)) continue  // skip already-completed units
 
       let accessible = false
       if (course.releaseMode === 'sequential') {
+        // First unit always open; subsequent units open when the previous is done
         accessible = i === 0 || completedIds.has(units[i - 1].id)
       } else if (course.releaseMode === 'date') {
         accessible = unit.isOpen || (!!unit.openDate && unit.openDate <= now)
       } else {
+        // manual: admin must explicitly open the unit
         accessible = unit.isOpen
       }
 
@@ -58,6 +61,8 @@ export async function GET() {
         break
       }
     }
+    // Note: currentUnit === null is valid — it means no units are currently accessible.
+    // The dashboard CTA handles this by linking to the course overview instead.
 
     return {
       id: course.id,

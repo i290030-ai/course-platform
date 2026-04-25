@@ -84,6 +84,8 @@ const SECTION_LABELS: Record<string, string> = {
    CTA button
 ───────────────────────────────────────── */
 function CtaButton({ course, resumeSection }: { course: CourseProgress; resumeSection?: string }) {
+  const router = useRouter()
+
   if (course.pct === 100) {
     return (
       <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 border
@@ -94,22 +96,41 @@ function CtaButton({ course, resumeSection }: { course: CourseProgress; resumeSe
     )
   }
 
-  const href = course.currentUnit ? `/unit/${course.currentUnit.id}` : `/course/${course.id}`
-  const hasResume = !!resumeSection && course.pct > 0
+  // currentUnit may be null when all remaining units are locked (e.g. manual mode, nothing open)
+  const hasCurrentUnit = !!course.currentUnit?.id
+  const hasResume = !!resumeSection && course.pct > 0 && hasCurrentUnit
+
   const label = course.pct === 0
     ? 'התחל קורס'
+    : !hasCurrentUnit
+    ? 'צפה בקורס'
     : hasResume
     ? 'המשך מהמקום שהפסקת'
-    : `המשך יחידה ${course.currentUnit ? course.currentUnit.orderIndex + 1 : ''}`
+    : `המשך יחידה ${course.currentUnit!.orderIndex + 1}`
+
+  function handleClick() {
+    console.log('currentUnit:', course.currentUnit)
+    try {
+      if (!course.currentUnit?.id) {
+        router.push(`/course/${course.id}`)
+        return
+      }
+      router.push(`/unit/${course.currentUnit.id}`)
+    } catch (err) {
+      console.error('Navigation error:', err)
+      router.push(`/course/${course.id}`)
+    }
+  }
 
   return (
-    <Link href={href}
+    <button
+      onClick={handleClick}
       className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700
         active:scale-95 text-white text-sm font-bold px-4 py-2 rounded-xl
         transition-all duration-150 shadow-sm hover:shadow-md">
       {label}
       <span className="text-xs opacity-80">{course.pct === 0 ? '▶' : '→'}</span>
-    </Link>
+    </button>
   )
 }
 
