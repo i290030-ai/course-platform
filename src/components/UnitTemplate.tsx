@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import AssignmentPanel from './AssignmentPanel'
+import Header from './Header'
 
 /* ─────────────────────────────────────────
    Types
@@ -16,6 +17,7 @@ export interface UnitTemplateProps {
   /* meta */
   unitId: string
   courseId: string
+  courseTitle?: string   // used in breadcrumb
   title: string
   description?: string
   orderIndex?: number
@@ -135,6 +137,7 @@ function resourceIcon(type: UnitResource['type']) {
 export default function UnitTemplate({
   unitId,
   courseId,
+  courseTitle,
   title,
   description,
   orderIndex,
@@ -219,6 +222,7 @@ export default function UnitTemplate({
   ──────────────────────────────────────── */
   return (
     <div dir="rtl" className="min-h-screen bg-[#f5f6fa]">
+      <Header />
 
       {/* ══ SECTION 0 — HERO ══════════════════════════════════════ */}
       <div className="bg-white border-b border-gray-100 shadow-sm">
@@ -226,14 +230,22 @@ export default function UnitTemplate({
 
           {/* top row: breadcrumb + status */}
           <div className="flex justify-between items-center mb-5">
-            <Link href={`/course/${courseId}`}
-              className="flex items-center gap-1.5 text-sm text-indigo-500 hover:text-indigo-700
-                font-semibold transition-colors">
-              <svg className="w-4 h-4 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              חזרה לקורס
-            </Link>
+            <nav className="flex items-center gap-2 text-sm text-gray-400 min-w-0">
+              <Link href="/dashboard" className="hover:text-indigo-600 font-medium transition-colors shrink-0">
+                קורסים
+              </Link>
+              <span className="text-gray-300">/</span>
+              <Link href={`/course/${courseId}`}
+                className="hover:text-indigo-600 font-medium transition-colors truncate max-w-[160px]">
+                {courseTitle ?? 'הקורס'}
+              </Link>
+              {orderIndex !== undefined && (
+                <>
+                  <span className="text-gray-300">/</span>
+                  <span className="text-gray-700 font-semibold shrink-0">יחידה {orderIndex + 1}</span>
+                </>
+              )}
+            </nav>
             <div className="flex items-center gap-2">
               {hasVideo && <Tag color="purple">🎬 סרטון</Tag>}
               {hasAssignment && <Tag color="rose">📝 משימה</Tag>}

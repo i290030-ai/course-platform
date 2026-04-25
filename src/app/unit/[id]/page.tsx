@@ -32,7 +32,8 @@ interface Parsed {
   codeBlocks: string[]
 }
 
-function parseUnitContent(raw: string): Parsed {
+function parseUnitContent(raw: string | null | undefined): Parsed {
+  if (!raw) return { objectives: [], mainContent: '', videoUrl: null, practice: null, assignment: null, codeBlocks: [] }
   const lines = raw.split('\n')
   const objectives: string[] = []
   const mainLines: string[] = []
@@ -108,7 +109,9 @@ export default function UnitPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const [unit, setUnit] = useState<ApiUnit | null>(null)
   const [courseUnits, setCourseUnits] = useState<ApiUnit[]>([])
+  const [courseTitle, setCourseTitle] = useState<string | undefined>(undefined)
   const [completed, setCompleted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -119,16 +122,20 @@ export default function UnitPage({ params }: { params: { id: string } }) {
 
     fetch(`/api/unit/${params.id}`)
       .then(r => r.json())
-      .then((data: ApiUnit) => {
+      .then((data: ApiUnit & { error?: string }) => {
+        if (data.error) { setError(data.error); return }
         setUnit(data)
         setCompleted(data.completed ?? false)
-        // Load sibling units to find next
-        fetch(`/api/units/${data.courseId}`)
-          .then(r => r.json())
-          .then((units: ApiUnit[]) => {
-            setCourseUnits(Array.isArray(units) ? units : [])
-          })
+        // Load sibling units + course title in parallel
+        Promise.all([
+          fetch(`/api/units/${data.courseId}`).then(r => r.json()),
+          fetch(`/api/courses/${data.courseId}`).then(r => r.json()),
+        ]).then(([units, course]) => {
+          setCourseUnits(Array.isArray(units) ? units : [])
+          if (course?.title) setCourseTitle(course.title)
+        })
       })
+      .catch(() => setError('שגיאה בטעינת היחידה'))
   }, [status, params.id])
 
   const handleComplete = async () => {
@@ -139,6 +146,21 @@ export default function UnitPage({ params }: { params: { id: string } }) {
     })
     setCompleted(true)
   }
+
+  /* Error state */
+  if (error)
+    return (
+      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-[#f5f6fa]">
+        <div className="text-center space-y-3">
+          <p className="text-4xl">🔒</p>
+          <p className="font-bold text-gray-700 text-lg">היחידה אינה זמינה</p>
+          <p className="text-gray-400 text-sm">{error}</p>
+          <a href="/dashboard" className="inline-block mt-2 text-indigo-600 hover:underline text-sm font-medium">
+            חזרה לדאשבורד
+          </a>
+        </div>
+      </div>
+    )
 
   /* Loading state */
   if (!unit)
@@ -173,6 +195,7 @@ export default function UnitPage({ params }: { params: { id: string } }) {
     <UnitTemplate
       unitId={unit.id}
       courseId={unit.courseId}
+      courseTitle={courseTitle}
       title={unit.title}
       orderIndex={unit.orderIndex}
       objectives={parsed.objectives}
