@@ -1,9 +1,11 @@
 'use client'
 import { useSession } from 'next-auth/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { isAdminRole } from '@/lib/roles'
+import UnitMediaBlocks from '@/components/UnitMediaBlocks'
+import type { UnitMediaItem } from '@/components/UnitMediaBlocks'
 
 /* ─────────────────────────────────────────
    Block type config
@@ -361,35 +363,70 @@ function BlockCard({
 }
 
 /* ─────────────────────────────────────────
-   Block type selector
+   Block type modal
 ───────────────────────────────────────── */
-function BlockTypeSelector({
+function BlockTypeModal({
   onSelect,
-  onCancel,
+  onClose,
 }: {
   onSelect: (type: string) => void
-  onCancel: () => void
+  onClose: () => void
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
-    <div className="bg-white rounded-2xl border-2 border-dashed border-indigo-200 p-6">
-      <p className="text-sm font-bold text-gray-700 mb-4 text-center">בחר סוג בלוק</p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {BLOCK_TYPES.map((bt) => (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        ref={ref}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6"
+        dir="rtl"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-bold text-gray-800">בחר סוג תוכן</h2>
           <button
-            key={bt.type}
-            onClick={() => onSelect(bt.type)}
-            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-sm font-semibold
-              transition-all hover:scale-105 active:scale-95 cursor-pointer ${bt.badge}`}
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100
+              text-gray-400 hover:text-gray-600 transition-colors text-lg font-bold"
           >
-            <span className="text-2xl">{bt.icon}</span>
-            <span>{bt.label}</span>
+            ×
           </button>
-        ))}
-      </div>
-      <div className="flex justify-center mt-4">
-        <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
-          ביטול
-        </button>
+        </div>
+
+        {/* Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {BLOCK_TYPES.map((bt) => (
+            <button
+              key={bt.type}
+              onClick={() => { onSelect(bt.type); onClose() }}
+              className={`flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border-2
+                text-sm font-semibold transition-all hover:scale-105 active:scale-95 ${bt.badge}`}
+            >
+              <span className="text-2xl">{bt.icon}</span>
+              <span>{bt.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex justify-center mt-5">
+          <button
+            onClick={onClose}
+            className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            ביטול
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -415,6 +452,7 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
   })
   const [metaSaving, setMetaSaving] = useState(false)
   const [addingBlock, setAddingBlock] = useState(false)
+  const [previewMode, setPreviewMode] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -746,61 +784,118 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
 
         {/* ── BLOCKS SECTION ── */}
         <section>
-          <div className="flex items-center justify-between mb-4">
+          {/* Section header with toggle + add button */}
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <div>
               <h2 className="text-sm font-bold text-gray-700 uppercase tracking-widest text-indigo-600">
-                בלוקי תוכן
+                תוכן היחידה
               </h2>
               {sortedBlocks.length > 0 && (
-                <p className="text-xs text-gray-400 mt-0.5">{sortedBlocks.length} בלוקים • מסודרים לפי סדר תצוגה</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {sortedBlocks.length} בלוקים • מסודרים לפי סדר תצוגה
+                </p>
               )}
             </div>
-            {!addingBlock && (
-              <button
-                onClick={() => setAddingBlock(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm
-                  font-bold rounded-xl hover:bg-indigo-700 transition-colors"
-              >
-                + הוסף בלוק
-              </button>
-            )}
-          </div>
-
-          <div className="space-y-4">
-            {addingBlock && (
-              <BlockTypeSelector
-                onSelect={addBlock}
-                onCancel={() => setAddingBlock(false)}
-              />
-            )}
-
-            {sortedBlocks.length === 0 && !addingBlock && (
-              <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center">
-                <p className="text-4xl mb-3">📦</p>
-                <p className="text-gray-500 text-sm font-semibold">אין בלוקי תוכן עדיין</p>
-                <p className="text-gray-400 text-xs mt-1">
-                  לחץ "+ הוסף בלוק" להוספת טקסט, תמונות, סרטונים ועוד
-                </p>
+            <div className="flex items-center gap-2">
+              {/* Preview / Edit toggle */}
+              <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-1">
+                <button
+                  onClick={() => setPreviewMode(false)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    !previewMode
+                      ? 'bg-white text-gray-800 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  עריכה
+                </button>
+                <button
+                  onClick={() => setPreviewMode(true)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    previewMode
+                      ? 'bg-white text-gray-800 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  תצוגת סטודנט
+                </button>
               </div>
-            )}
-
-            {sortedBlocks.map((block, idx) => (
-              <BlockCard
-                key={block.id}
-                block={block}
-                isFirst={idx === 0}
-                isLast={idx === sortedBlocks.length - 1}
-                onSave={(data) => updateBlock(block.id, data)}
-                onDelete={() => deleteBlock(block.id)}
-                onMoveUp={() => moveBlock(block.id, 'up')}
-                onMoveDown={() => moveBlock(block.id, 'down')}
-              />
-            ))}
+              {/* Add button — only in edit mode */}
+              {!previewMode && (
+                <button
+                  onClick={() => setAddingBlock(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white
+                    text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors"
+                >
+                  + הוסף תוכן
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* ── PREVIEW MODE ── */}
+          {previewMode ? (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-4">
+                תצוגה כפי שהסטודנט רואה
+              </p>
+              {sortedBlocks.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-3xl mb-2">👁</p>
+                  <p className="text-sm">אין תוכן להצגה — הוסף בלוקים במצב עריכה</p>
+                </div>
+              ) : (
+                <UnitMediaBlocks blocks={sortedBlocks as UnitMediaItem[]} />
+              )}
+            </div>
+          ) : (
+            /* ── EDIT MODE ── */
+            <div className="space-y-4">
+              {sortedBlocks.length === 0 ? (
+                <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center">
+                  <p className="text-4xl mb-3">📄</p>
+                  <p className="text-gray-600 text-sm font-semibold mb-1">
+                    טרם נוסף תוכן ליחידה
+                  </p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    לחץ על הוסף תוכן כדי להתחיל
+                  </p>
+                  <button
+                    onClick={() => setAddingBlock(true)}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600
+                      text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors"
+                  >
+                    + הוסף תוכן
+                  </button>
+                </div>
+              ) : (
+                sortedBlocks.map((block, idx) => (
+                  <BlockCard
+                    key={block.id}
+                    block={block}
+                    isFirst={idx === 0}
+                    isLast={idx === sortedBlocks.length - 1}
+                    onSave={(data) => updateBlock(block.id, data)}
+                    onDelete={() => deleteBlock(block.id)}
+                    onMoveUp={() => moveBlock(block.id, 'up')}
+                    onMoveDown={() => moveBlock(block.id, 'down')}
+                  />
+                ))
+              )}
+            </div>
+          )}
         </section>
       </main>
 
       {toast && <Toast msg={toast} onDone={() => setToast(null)} />}
+
+      {/* Block type modal */}
+      {addingBlock && (
+        <BlockTypeModal
+          onSelect={addBlock}
+          onClose={() => setAddingBlock(false)}
+        />
+      )}
     </div>
   )
 }
