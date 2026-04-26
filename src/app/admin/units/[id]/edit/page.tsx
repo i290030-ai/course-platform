@@ -228,7 +228,7 @@ function BlockPreview({ block }: { block: Block }) {
 ───────────────────────────────────────── */
 function GripIcon() {
   return (
-    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
       <circle cx="7" cy="4"  r="1.5" />
       <circle cx="13" cy="4"  r="1.5" />
       <circle cx="7" cy="10" r="1.5" />
@@ -263,6 +263,7 @@ function BlockCard({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -316,21 +317,21 @@ function BlockCard({
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div ref={setNodeRef} style={style} {...attributes} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/80">
         <div className="flex items-center gap-2.5 min-w-0">
           {/* Drag handle */}
-          <button
-            {...attributes}
+          <div
+            ref={setActivatorNodeRef}
             {...listeners}
-            className="cursor-grab active:cursor-grabbing flex-shrink-0 w-6 h-8 flex items-center
-              justify-center rounded text-gray-300 hover:text-gray-500 transition-colors touch-none"
-            title="גרור לשינוי סדר"
-            tabIndex={-1}
+            className="cursor-grab active:cursor-grabbing flex-shrink-0 w-7 h-8 flex items-center
+              justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200
+              transition-colors touch-none select-none"
+            title="גרור כדי לשנות סדר"
           >
             <GripIcon />
-          </button>
+          </div>
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border flex-shrink-0 ${typeBadge(block.type)}`}>
             {typeIcon(block.type)} {typeLabel(block.type)}
           </span>
