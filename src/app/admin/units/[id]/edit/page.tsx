@@ -403,6 +403,7 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
   const router = useRouter()
 
   const [unit, setUnit] = useState<UnitData | null>(null)
+  const [courseTitle, setCourseTitle] = useState<string | null>(null)
   const [blocks, setBlocks] = useState<Block[]>([])
   const [metaForm, setMetaForm] = useState({
     title: '',
@@ -443,6 +444,13 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
             : '',
           isOpen: data.isOpen ?? false,
         })
+        // Fetch course title for breadcrumb/context
+        if (data.courseId) {
+          fetch(`/api/courses/${data.courseId}`)
+            .then((r) => r.json())
+            .then((c) => { if (c?.title) setCourseTitle(c.title) })
+            .catch(() => {})
+        }
       })
       .catch(() => setError('שגיאה בטעינת היחידה'))
 
@@ -579,14 +587,35 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
     <div className="min-h-screen bg-gray-50" dir="rtl">
       {/* Nav */}
       <nav className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/admin/units" className="text-indigo-600 text-sm font-medium hover:underline">
-            ← ניהול יחידות
-          </Link>
-          <h1 className="text-base font-bold text-gray-800 truncate max-w-[260px]">
-            ✏️ {unit.title}
-          </h1>
-          <div className="w-24" />
+        <div className="max-w-4xl mx-auto px-4 py-3">
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1 flex-wrap">
+            <Link href="/admin" className="hover:text-gray-600 transition-colors">לוח ניהול</Link>
+            <span>/</span>
+            <Link href="/admin/units" className="hover:text-gray-600 transition-colors">יחידות</Link>
+            {courseTitle && (
+              <>
+                <span>/</span>
+                <span className="text-indigo-600 font-semibold">{courseTitle}</span>
+              </>
+            )}
+            <span>/</span>
+            <span className="text-gray-600 truncate max-w-[200px]">{unit.title}</span>
+          </div>
+          {/* Title row */}
+          <div className="flex items-center justify-between">
+            <h1 className="text-base font-bold text-gray-800 truncate">
+              עריכת יחידה
+              {courseTitle && (
+                <span className="mr-2 text-sm font-normal text-indigo-600">
+                  עבור הקורס: {courseTitle}
+                </span>
+              )}
+            </h1>
+            <Link href="/admin/units" className="text-xs text-indigo-600 hover:underline font-medium">
+              ← חזרה לרשימה
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -596,9 +625,17 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
         <section className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="h-1 bg-gradient-to-l from-indigo-500 to-purple-500" />
           <div className="p-6 space-y-5">
-            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-widest text-indigo-600">
-              פרטי היחידה
-            </h2>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h2 className="text-sm font-bold text-gray-700 uppercase tracking-widest text-indigo-600">
+                פרטי היחידה
+              </h2>
+              {courseTitle && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold
+                  text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-full">
+                  📚 {courseTitle}
+                </span>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">

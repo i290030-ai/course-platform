@@ -55,7 +55,11 @@ export default function AdminUnitsPage() {
         .then((d) => {
           const c = Array.isArray(d) ? d : []
           setCourses(c)
-          if (c.length > 0) setSelectedCourse(c[0].id)
+          if (c.length > 0) {
+            const saved = sessionStorage.getItem('adminUnitsSelectedCourse')
+            const isValid = saved && c.some((course) => course.id === saved)
+            setSelectedCourse(isValid ? saved : c[0].id)
+          }
         })
     }
   }, [status])
@@ -133,7 +137,10 @@ export default function AdminUnitsPage() {
           <label className="block text-sm font-bold text-gray-700 mb-2">בחר קורס</label>
           <select
             value={selectedCourse}
-            onChange={(e) => setSelectedCourse(e.target.value)}
+            onChange={(e) => {
+              setSelectedCourse(e.target.value)
+              sessionStorage.setItem('adminUnitsSelectedCourse', e.target.value)
+            }}
             className="border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white min-w-[260px]"
             required
           >
