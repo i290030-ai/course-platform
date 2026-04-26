@@ -783,7 +783,9 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
         </section>
 
         {/* ── BLOCKS SECTION ── */}
-        <section>
+        <section className={`rounded-3xl transition-colors duration-300 ${
+          previewMode ? 'bg-indigo-50/60 p-5 -mx-2' : ''
+        }`}>
           {/* Section header with toggle + add button */}
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <div>
@@ -796,29 +798,36 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              {/* Preview / Edit toggle */}
-              <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-1">
-                <button
-                  onClick={() => setPreviewMode(false)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                    !previewMode
-                      ? 'bg-white text-gray-800 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  עריכה
-                </button>
-                <button
-                  onClick={() => setPreviewMode(true)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                    previewMode
-                      ? 'bg-white text-gray-800 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  תצוגת סטודנט
-                </button>
+            <div className="flex items-center gap-3">
+              {/* Labelled segmented control */}
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  מצב תצוגה
+                </span>
+                <div className={`flex items-center rounded-xl p-1 gap-0.5 transition-colors ${
+                  previewMode ? 'bg-indigo-50 border border-indigo-200' : 'bg-gray-100'
+                }`}>
+                  <button
+                    onClick={() => setPreviewMode(false)}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                      !previewMode
+                        ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    ✏️ עריכה
+                  </button>
+                  <button
+                    onClick={() => setPreviewMode(true)}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                      previewMode
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    👁️ תצוגת סטודנט
+                  </button>
+                </div>
               </div>
               {/* Add button — only in edit mode */}
               {!previewMode && (
@@ -835,10 +844,14 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
 
           {/* ── PREVIEW MODE ── */}
           {previewMode ? (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-4">
-                תצוגה כפי שהסטודנט רואה
-              </p>
+            <div className="bg-white rounded-2xl border border-indigo-100 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-5 pb-4 border-b border-indigo-100">
+                <span className="text-lg">👁️</span>
+                <div>
+                  <p className="text-xs font-bold text-indigo-700">תצוגת סטודנט</p>
+                  <p className="text-[11px] text-indigo-400">כך הסטודנטים יראו את היחידה</p>
+                </div>
+              </div>
               {sortedBlocks.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
                   <p className="text-3xl mb-2">👁</p>
