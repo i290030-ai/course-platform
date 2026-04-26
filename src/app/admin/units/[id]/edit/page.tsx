@@ -6,6 +6,23 @@ import Link from 'next/link'
 import { isAdminRole } from '@/lib/roles'
 import UnitMediaBlocks from '@/components/UnitMediaBlocks'
 import type { UnitMediaItem } from '@/components/UnitMediaBlocks'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 /* ─────────────────────────────────────────
    Block type config
@@ -207,7 +224,23 @@ function BlockPreview({ block }: { block: Block }) {
 }
 
 /* ─────────────────────────────────────────
-   Block card
+   Grip handle icon
+───────────────────────────────────────── */
+function GripIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+      <circle cx="7" cy="4"  r="1.5" />
+      <circle cx="13" cy="4"  r="1.5" />
+      <circle cx="7" cy="10" r="1.5" />
+      <circle cx="13" cy="10" r="1.5" />
+      <circle cx="7" cy="16" r="1.5" />
+      <circle cx="13" cy="16" r="1.5" />
+    </svg>
+  )
+}
+
+/* ─────────────────────────────────────────
+   Block card (sortable)
 ───────────────────────────────────────── */
 function BlockCard({
   block,
@@ -226,6 +259,22 @@ function BlockCard({
   onMoveUp: () => Promise<void>
   onMoveDown: () => Promise<void>
 }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: block.id })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  }
+
   const isEmpty = !block.title && !block.description && !block.url
   const [editing, setEditing] = useState(isEmpty)
   const [form, setForm] = useState<BlockForm>({
@@ -267,10 +316,21 @@ function BlockCard({
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div ref={setNodeRef} style={style} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50/80">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/80">
         <div className="flex items-center gap-2.5 min-w-0">
+          {/* Drag handle */}
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing flex-shrink-0 w-6 h-8 flex items-center
+              justify-center rounded text-gray-300 hover:text-gray-500 transition-colors touch-none"
+            title="גרור לשינוי סדר"
+            tabIndex={-1}
+          >
+            <GripIcon />
+          </button>
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border flex-shrink-0 ${typeBadge(block.type)}`}>
             {typeIcon(block.type)} {typeLabel(block.type)}
           </span>
@@ -458,6 +518,12 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
 
   const showToast = useCallback((msg: string) => setToast(msg), [])
 
+  /* ── Drag & drop sensors ── */
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
     if (status === 'authenticated' && !isAdminRole((session?.user as any)?.role))
@@ -592,6 +658,43 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
       )
     },
     [blocks, params.id],
+  )
+
+  /* ── Drag end handler ── */
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const sorted = [...blocks].sort((a, b) => a.orderIndex - b.orderIndex)
+      const oldIndex = sorted.findIndex((b) => b.id === active.id)
+      const newIndex = sorted.findIndex((b) => b.id === over.id)
+
+      const reordered = arrayMove(sorted, oldIndex, newIndex).map((b, i) => ({
+        ...b,
+        orderIndex: i,
+      }))
+
+      // Update locally immediately for snappy feel
+      setBlocks(reordered)
+
+      // Persist to DB
+      try {
+        await Promise.all(
+          reordered.map((b) =>
+            fetch(`/api/admin/units/${params.id}/media/${b.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderIndex: b.orderIndex }),
+            }),
+          ),
+        )
+        showToast('סדר הבלוקים נשמר')
+      } catch {
+        showToast('שגיאה בשמירת הסדר')
+      }
+    },
+    [blocks, params.id, showToast],
   )
 
   const sortedBlocks = [...blocks].sort((a, b) => a.orderIndex - b.orderIndex)
@@ -794,7 +897,7 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
               </h2>
               {sortedBlocks.length > 0 && (
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {sortedBlocks.length} בלוקים • מסודרים לפי סדר תצוגה
+                  {sortedBlocks.length} בלוקים • גרור לשינוי סדר
                 </p>
               )}
             </div>
@@ -882,18 +985,31 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
                   </button>
                 </div>
               ) : (
-                sortedBlocks.map((block, idx) => (
-                  <BlockCard
-                    key={block.id}
-                    block={block}
-                    isFirst={idx === 0}
-                    isLast={idx === sortedBlocks.length - 1}
-                    onSave={(data) => updateBlock(block.id, data)}
-                    onDelete={() => deleteBlock(block.id)}
-                    onMoveUp={() => moveBlock(block.id, 'up')}
-                    onMoveDown={() => moveBlock(block.id, 'down')}
-                  />
-                ))
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={sortedBlocks.map((b) => b.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-4">
+                      {sortedBlocks.map((block, idx) => (
+                        <BlockCard
+                          key={block.id}
+                          block={block}
+                          isFirst={idx === 0}
+                          isLast={idx === sortedBlocks.length - 1}
+                          onSave={(data) => updateBlock(block.id, data)}
+                          onDelete={() => deleteBlock(block.id)}
+                          onMoveUp={() => moveBlock(block.id, 'up')}
+                          onMoveDown={() => moveBlock(block.id, 'down')}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               )}
             </div>
           )}
