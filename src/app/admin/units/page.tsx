@@ -69,21 +69,37 @@ export default function AdminUnitsPage() {
   }, [selectedCourse])
 
   const createUnit = async () => {
-    if (!selectedCourse || creating) return
+    if (!selectedCourse) {
+      console.error('[createUnit] no courseId selected')
+      setToast('יש לבחור קורס לפני יצירת יחידה')
+      return
+    }
+    if (creating) return
     setCreating(true)
-    const res = await fetch('/api/units', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        courseId: selectedCourse,
-        title: 'יחידה חדשה',
-        content: '',
-        orderIndex: units.length,
-      }),
-    })
-    const data = await res.json()
-    setCreating(false)
-    if (data.id) router.push(`/admin/units/${data.id}/edit`)
+    try {
+      const res = await fetch('/api/units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: selectedCourse,
+          title: 'יחידה חדשה',
+          content: '',
+          orderIndex: units.length,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.id) {
+        console.error('[createUnit] server error:', data.error, 'status:', res.status)
+        setToast(data.error ?? 'שגיאה ביצירת היחידה')
+        return
+      }
+      router.push(`/admin/units/${data.id}/edit`)
+    } catch (err) {
+      console.error('[createUnit] fetch error:', err)
+      setToast('שגיאת רשת — לא ניתן ליצור יחידה')
+    } finally {
+      setCreating(false)
+    }
   }
 
   const deleteUnit = async (id: string) => {
@@ -119,7 +135,14 @@ export default function AdminUnitsPage() {
             value={selectedCourse}
             onChange={(e) => setSelectedCourse(e.target.value)}
             className="border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white min-w-[260px]"
+            required
           >
+            {courses.length === 0 && (
+              <option value="" disabled>טוען קורסים...</option>
+            )}
+            {courses.length > 0 && !selectedCourse && (
+              <option value="" disabled>-- בחר קורס --</option>
+            )}
             {courses.map((c) => (
               <option key={c.id} value={c.id}>{c.title}</option>
             ))}
