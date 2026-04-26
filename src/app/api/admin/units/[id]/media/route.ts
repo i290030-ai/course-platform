@@ -4,7 +4,9 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isAdminRole } from '@/lib/roles'
 
-const VALID_TYPES = ['image', 'document', 'resource'] as const
+const VALID_TYPES = ['text', 'video', 'image', 'link', 'document', 'resource', 'assignment'] as const
+// Types that require a URL
+const URL_REQUIRED_TYPES = ['video', 'image', 'link', 'document', 'resource']
 
 /* ── GET /api/admin/units/[id]/media ─────────────────────────── */
 export async function GET(
@@ -23,7 +25,8 @@ export async function GET(
     orderBy: { orderIndex: 'asc' },
   })
 
-  return NextResponse.json({ unit, media })
+  // Return array directly (edit page expects array, not { unit, media })
+  return NextResponse.json(media)
 }
 
 /* ── POST /api/admin/units/[id]/media ────────────────────────── */
@@ -39,20 +42,24 @@ export async function POST(
   if (!unit) return NextResponse.json({ error: 'Unit not found' }, { status: 404 })
 
   const body = await req.json()
-  const { type, title, description, url, caption } = body
+  const { type, title, description, url, caption, orderIndex: bodyOrderIndex } = body
 
   if (!VALID_TYPES.includes(type))
-    return NextResponse.json({ error: 'סוג מדיה לא חוקי' }, { status: 400 })
-  if (!url?.trim())
-    return NextResponse.json({ error: 'כתובת URL נדרשת' }, { status: 400 })
+    return NextResponse.json({ error: 'סוג בלוק לא חוקי' }, { status: 400 })
 
-  // Place new block at end
-  const lastBlock = await prisma.unitMedia.findFirst({
-    where: { unitId: params.id },
-    orderBy: { orderIndex: 'desc' },
-    select: { orderIndex: true },
-  })
-  const orderIndex = (lastBlock?.orderIndex ?? -1) + 1
+  if (URL_REQUIRED_TYPES.includes(type) && !url?.trim())
+    return NextResponse.json({ error: 'כתובת URL נדרשת לסוג זה' }, { status: 400 })
+
+  // Place new block at end (or use provided orderIndex)
+  let orderIndex = bodyOrderIndex
+  if (orderIndex === undefined) {
+    const lastBlock = await prisma.unitMedia.findFirst({
+      where: { unitId: params.id },
+      orderBy: { orderIndex: 'desc' },
+      select: { orderIndex: true },
+    })
+    orderIndex = (lastBlock?.orderIndex ?? -1) + 1
+  }
 
   const media = await prisma.unitMedia.create({
     data: {
@@ -60,7 +67,7 @@ export async function POST(
       type,
       title: title?.trim() || null,
       description: description?.trim() || null,
-      url: url.trim(),
+      url: url?.trim() || null,
       caption: caption?.trim() || null,
       orderIndex,
     },

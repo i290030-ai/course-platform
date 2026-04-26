@@ -71,19 +71,18 @@ model Unit {
   assignment Assignment?
 }
 
-// Structured media blocks attached to a unit.
-// type: "image" | "document" | "resource"
-// url: external URL or future-storage URL (Supabase, S3, etc.)
-// Prepared for file-storage integration: replace url with storageKey
-// once a storage adapter is wired in.
+// Structured content blocks attached to a unit.
+// type: "text" | "video" | "image" | "link" | "document" | "resource" | "assignment"
+// url: external URL (null for text/assignment blocks)
+// description: body text for text/assignment blocks; caption/description for others
 model UnitMedia {
   id          String   @id @default(cuid())
   unitId      String
   unit        Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  type        String   // "image" | "document" | "resource"
+  type        String   // "text" | "video" | "image" | "link" | "document" | "resource" | "assignment"
   title       String?
   description String?
-  url         String
+  url         String?
   caption     String?
   orderIndex  Int      @default(0)
   createdAt   DateTime @default(now())

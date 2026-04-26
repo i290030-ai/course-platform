@@ -20,11 +20,11 @@ export async function PUT(
   const body = await req.json()
   const data: Record<string, unknown> = {}
 
-  if (body.title  !== undefined) data.title       = body.title?.trim()  || null
+  if (body.title       !== undefined) data.title       = body.title?.trim()       || null
   if (body.description !== undefined) data.description = body.description?.trim() || null
-  if (body.caption !== undefined) data.caption    = body.caption?.trim() || null
-  if (body.url    !== undefined) data.url         = body.url.trim()
-  if (body.orderIndex !== undefined) data.orderIndex = body.orderIndex
+  if (body.caption     !== undefined) data.caption     = body.caption?.trim()     || null
+  if (body.url         !== undefined) data.url         = body.url?.trim()         || null
+  if (body.orderIndex  !== undefined) data.orderIndex  = body.orderIndex
 
   const updated = await prisma.unitMedia.update({ where: { id: params.mediaId }, data })
   return NextResponse.json(updated)

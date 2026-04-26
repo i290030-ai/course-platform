@@ -29,7 +29,17 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const { id, ...data } = await req.json()
-  if (data.openDate) data.openDate = new Date(data.openDate)
+  if (data.openDate !== undefined) data.openDate = data.openDate ? new Date(data.openDate) : null
   const unit = await prisma.unit.update({ where: { id }, data })
   return NextResponse.json(unit)
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!isAdminRole((session?.user as any)?.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  const { id } = await req.json()
+  await prisma.unit.delete({ where: { id } })
+  return NextResponse.json({ success: true })
 }
