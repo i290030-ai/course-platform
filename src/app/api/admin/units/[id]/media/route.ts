@@ -5,8 +5,6 @@ import { prisma } from '@/lib/prisma'
 import { isAdminRole } from '@/lib/roles'
 
 const VALID_TYPES = ['text', 'video', 'image', 'link', 'document', 'resource', 'assignment'] as const
-// Types that require a URL
-const URL_REQUIRED_TYPES = ['video', 'image', 'link', 'document', 'resource']
 
 /* ── GET /api/admin/units/[id]/media ─────────────────────────── */
 export async function GET(
@@ -17,16 +15,19 @@ export async function GET(
   if (!isAdminRole((session?.user as any)?.role))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const unit = await prisma.unit.findUnique({ where: { id: params.id }, select: { id: true, title: true } })
-  if (!unit) return NextResponse.json({ error: 'Unit not found' }, { status: 404 })
+  try {
+    const unit = await prisma.unit.findUnique({ where: { id: params.id }, select: { id: true } })
+    if (!unit) return NextResponse.json({ error: 'Unit not found' }, { status: 404 })
 
-  const media = await prisma.unitMedia.findMany({
-    where: { unitId: params.id },
-    orderBy: { orderIndex: 'asc' },
-  })
-
-  // Return array directly (edit page expects array, not { unit, media })
-  return NextResponse.json(media)
+    const media = await prisma.unitMedia.findMany({
+      where: { unitId: params.id },
+      orderBy: { orderIndex: 'asc' },
+    })
+    return NextResponse.json(media)
+  } catch (err) {
+    console.error('[media GET] prisma error:', err)
+    return NextResponse.json({ error: 'שגיאת שרת' }, { status: 500 })
+  }
 }
 
 /* ── POST /api/admin/units/[id]/media ────────────────────────── */
@@ -41,18 +42,33 @@ export async function POST(
   const unit = await prisma.unit.findUnique({ where: { id: params.id }, select: { id: true } })
   if (!unit) return NextResponse.json({ error: 'Unit not found' }, { status: 404 })
 
-  const body = await req.json()
-  const { type, title, description, url, caption, orderIndex: bodyOrderIndex } = body
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
 
-  if (!VALID_TYPES.includes(type))
-    return NextResponse.json({ error: 'סוג בלוק לא חוקי' }, { status: 400 })
+  const { type, title, description, url, caption, orderIndex: bodyOrderIndex } = body as {
+    type: string
+    title?: string
+    description?: string
+    url?: string
+    caption?: string
+    orderIndex?: number
+  }
 
-  if (URL_REQUIRED_TYPES.includes(type) && !url?.trim())
-    return NextResponse.json({ error: 'כתובת URL נדרשת לסוג זה' }, { status: 400 })
+  if (!type || !VALID_TYPES.includes(type as typeof VALID_TYPES[number])) {
+    console.error('[media POST] invalid type:', type)
+    return NextResponse.json({ error: `סוג בלוק לא חוקי: "${type}". הערכים המותרים: ${VALID_TYPES.join(', ')}` }, { status: 400 })
+  }
+
+  // URL is NOT required on creation — the block starts empty and is filled via edit.
+  // URL validation (for types that need it) happens on the PUT (save) call.
 
   // Place new block at end (or use provided orderIndex)
-  let orderIndex = bodyOrderIndex
-  if (orderIndex === undefined) {
+  let orderIndex: number = typeof bodyOrderIndex === 'number' ? bodyOrderIndex : 0
+  if (bodyOrderIndex === undefined) {
     const lastBlock = await prisma.unitMedia.findFirst({
       where: { unitId: params.id },
       orderBy: { orderIndex: 'desc' },
@@ -61,17 +77,21 @@ export async function POST(
     orderIndex = (lastBlock?.orderIndex ?? -1) + 1
   }
 
-  const media = await prisma.unitMedia.create({
-    data: {
-      unitId: params.id,
-      type,
-      title: title?.trim() || null,
-      description: description?.trim() || null,
-      url: url?.trim() || null,
-      caption: caption?.trim() || null,
-      orderIndex,
-    },
-  })
-
-  return NextResponse.json(media, { status: 201 })
+  try {
+    const media = await prisma.unitMedia.create({
+      data: {
+        unitId: params.id,
+        type,
+        title: (title as string | undefined)?.trim() || null,
+        description: (description as string | undefined)?.trim() || null,
+        url: (url as string | undefined)?.trim() || null,
+        caption: (caption as string | undefined)?.trim() || null,
+        orderIndex,
+      },
+    })
+    return NextResponse.json(media, { status: 201 })
+  } catch (err) {
+    console.error('[media POST] prisma error:', err)
+    return NextResponse.json({ error: 'שגיאת שרת ביצירת הבלוק' }, { status: 500 })
+  }
 }

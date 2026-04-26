@@ -474,15 +474,24 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
   }
 
   const addBlock = async (type: string) => {
-    const res = await fetch(`/api/admin/units/${params.id}/media`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, orderIndex: blocks.length }),
-    })
-    const block = await res.json()
-    if (block.error) { showToast('שגיאה בהוספת בלוק'); return }
-    setBlocks((prev) => [...prev, block])
-    setAddingBlock(false)
+    try {
+      const res = await fetch(`/api/admin/units/${params.id}/media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, orderIndex: blocks.length }),
+      })
+      const block = await res.json()
+      if (!res.ok || block.error) {
+        console.error('[addBlock] server error:', block.error, 'status:', res.status)
+        showToast(block.error ?? 'שגיאה בהוספת בלוק')
+        return
+      }
+      setBlocks((prev) => [...prev, block])
+      setAddingBlock(false)
+    } catch (err) {
+      console.error('[addBlock] fetch error:', err)
+      showToast('שגיאת רשת — לא ניתן להוסיף בלוק')
+    }
   }
 
   const updateBlock = useCallback(
