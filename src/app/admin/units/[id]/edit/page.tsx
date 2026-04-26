@@ -223,21 +223,6 @@ function BlockPreview({ block }: { block: Block }) {
   )
 }
 
-/* ─────────────────────────────────────────
-   Grip handle icon
-───────────────────────────────────────── */
-function GripIcon() {
-  return (
-    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-      <circle cx="7" cy="4"  r="1.5" />
-      <circle cx="13" cy="4"  r="1.5" />
-      <circle cx="7" cy="10" r="1.5" />
-      <circle cx="13" cy="10" r="1.5" />
-      <circle cx="7" cy="16" r="1.5" />
-      <circle cx="13" cy="16" r="1.5" />
-    </svg>
-  )
-}
 
 /* ─────────────────────────────────────────
    Block card (sortable)
@@ -321,17 +306,6 @@ function BlockCard({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/80">
         <div className="flex items-center gap-2.5 min-w-0">
-          {/* Drag handle */}
-          <div
-            ref={setActivatorNodeRef}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing flex-shrink-0 w-7 h-8 flex items-center
-              justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200
-              transition-colors touch-none select-none"
-            title="גרור כדי לשנות סדר"
-          >
-            <GripIcon />
-          </div>
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border flex-shrink-0 ${typeBadge(block.type)}`}>
             {typeIcon(block.type)} {typeLabel(block.type)}
           </span>
@@ -340,6 +314,18 @@ function BlockCard({
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Drag handle — always visible, next to arrows */}
+          <div
+            ref={setActivatorNodeRef}
+            {...listeners}
+            title="גרור"
+            className="w-9 h-8 flex items-center justify-center rounded-lg
+              bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900
+              cursor-grab active:cursor-grabbing touch-none select-none
+              text-base font-bold leading-none transition-colors flex-shrink-0"
+          >
+            ⠿
+          </div>
           <button
             onClick={onMoveUp}
             disabled={isFirst}
