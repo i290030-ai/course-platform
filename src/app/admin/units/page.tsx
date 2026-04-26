@@ -215,16 +215,24 @@ export default function AdminUnitsPage() {
                 </div>
                 {unit.zoomLink && <p className="text-xs text-blue-600 mt-1">{unit.zoomLink}</p>}
               </div>
-              <button
-                onClick={() => toggleUnit(unit)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  unit.isOpen
-                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                    : 'bg-green-100 text-green-700 hover:bg-green-200'
-                }`}
-              >
-                {unit.isOpen ? 'סגור יחידה' : 'פתח יחידה'}
-              </button>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/admin/units/${unit.id}/media`}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
+                >
+                  📎 מדיה
+                </Link>
+                <button
+                  onClick={() => toggleUnit(unit)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    unit.isOpen
+                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                      : 'bg-green-100 text-green-700 hover:bg-green-200'
+                  }`}
+                >
+                  {unit.isOpen ? 'סגור יחידה' : 'פתח יחידה'}
+                </button>
+              </div>
             </div>
           ))}
         </div>

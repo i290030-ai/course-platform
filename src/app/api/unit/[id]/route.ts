@@ -11,7 +11,10 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const userId = (session.user as any).id
   const role = (session.user as any).role
 
-  const unit = await prisma.unit.findUnique({ where: { id: params.id } })
+  const unit = await prisma.unit.findUnique({
+    where: { id: params.id },
+    include: { media: { orderBy: { orderIndex: 'asc' } } },
+  })
   if (!unit) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   if (!isAdminRole(role)) {

@@ -3,6 +3,7 @@ import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import UnitTemplate, { UnitResource, SidebarUnit } from '@/components/UnitTemplate'
+import type { UnitMediaItem } from '@/components/UnitMediaBlocks'
 
 /* ─────────────────────────────────────────
    Raw unit shape from the API
@@ -16,6 +17,7 @@ interface ApiUnit {
   completed?: boolean
   orderIndex?: number
   isOpen?: boolean
+  media?: UnitMediaItem[]
 }
 
 /* ─────────────────────────────────────────
@@ -117,6 +119,7 @@ export default function UnitPage({ params }: { params: { id: string } }) {
   const [courseUnits, setCourseUnits] = useState<ApiUnit[]>([])
   const [courseTitle, setCourseTitle] = useState<string | undefined>(undefined)
   const [completed, setCompleted] = useState(false)
+  const [mediaBlocks, setMediaBlocks] = useState<UnitMediaItem[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -136,6 +139,7 @@ export default function UnitPage({ params }: { params: { id: string } }) {
         }
         setUnit(data)
         setCompleted(data.completed ?? false)
+        setMediaBlocks(data.media ?? [])
         // Load sibling units + course title in parallel
         Promise.all([
           fetch(`/api/units/${data.courseId}`).then(r => r.json()),
@@ -233,6 +237,7 @@ export default function UnitPage({ params }: { params: { id: string } }) {
       nextUnitId={nextUnitId}
       nextUnitLocked={nextUnitLocked}
       courseUnits={sidebarUnits}
+      mediaBlocks={mediaBlocks}
       onComplete={handleComplete}
     />
   )

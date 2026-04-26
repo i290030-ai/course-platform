@@ -56,18 +56,37 @@ model CourseInstructor {
 }
 
 model Unit {
-  id         String     @id @default(cuid())
+  id         String      @id @default(cuid())
   courseId   String
-  course     Course     @relation(fields: [courseId], references: [id])
+  course     Course      @relation(fields: [courseId], references: [id])
   title      String
   content    String
   zoomLink   String?
   orderIndex Int
   openDate   DateTime?
-  isOpen     Boolean    @default(false)
+  isOpen     Boolean     @default(false)
   progress   Progress[]
-  createdAt  DateTime   @default(now())
+  media      UnitMedia[]
+  createdAt  DateTime    @default(now())
   assignment Assignment?
+}
+
+// Structured media blocks attached to a unit.
+// type: "image" | "document" | "resource"
+// url: external URL or future-storage URL (Supabase, S3, etc.)
+// Prepared for file-storage integration: replace url with storageKey
+// once a storage adapter is wired in.
+model UnitMedia {
+  id          String   @id @default(cuid())
+  unitId      String
+  unit        Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  type        String   // "image" | "document" | "resource"
+  title       String?
+  description String?
+  url         String
+  caption     String?
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
 }
 
 model Enrollment {

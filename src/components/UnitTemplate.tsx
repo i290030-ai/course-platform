@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import AssignmentPanel from './AssignmentPanel'
 import Header from './Header'
+import UnitMediaBlocks from './UnitMediaBlocks'
+import type { UnitMediaItem } from './UnitMediaBlocks'
 
 /* ─────────────────────────────────────────
    Types
@@ -41,6 +43,7 @@ export interface UnitTemplateProps {
   nextUnitId?: string | null
   nextUnitLocked?: boolean
   courseUnits?: SidebarUnit[]
+  mediaBlocks?: UnitMediaItem[]
   onComplete?: () => Promise<void>
   onSubmitAssignment?: () => void
 }
@@ -367,6 +370,7 @@ export default function UnitTemplate({
   nextUnitId,
   nextUnitLocked = false,
   courseUnits = [],
+  mediaBlocks = [],
   onComplete,
   onSubmitAssignment,
 }: UnitTemplateProps) {
@@ -852,6 +856,16 @@ export default function UnitTemplate({
                 </section>
                 <StepArrow />
               </>
+            )}
+
+            {/* MEDIA BLOCKS */}
+            {mediaBlocks.length > 0 && (
+              <section className="space-y-1">
+                <p className="text-[11px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">
+                  📎 חומרים נלווים
+                </p>
+                <UnitMediaBlocks blocks={mediaBlocks} />
+              </section>
             )}
 
             {/* ASSIGNMENT SUBMISSION PANEL */}
