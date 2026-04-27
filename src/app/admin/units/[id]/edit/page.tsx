@@ -548,14 +548,9 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
 
   const showToast = useCallback((msg: string) => setToast(msg), [])
 
-  // Save status reporting — auto-clears 'saved' after 2 s
-  const statusClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Save status reporting — stays visible until next change
   const reportStatus = useCallback((s: SaveStatus) => {
     setSaveStatus(s)
-    if (statusClearTimer.current) clearTimeout(statusClearTimer.current)
-    if (s === 'saved') {
-      statusClearTimer.current = setTimeout(() => setSaveStatus('idle'), 2000)
-    }
   }, [])
 
   // Track whether meta form has been hydrated from the API (so we don't auto-save on load)
