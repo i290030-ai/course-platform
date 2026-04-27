@@ -74,6 +74,27 @@ interface BlockForm {
 }
 
 /* ─────────────────────────────────────────
+   Save status indicator
+───────────────────────────────────────── */
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+function SaveStatusBar({ status }: { status: SaveStatus }) {
+  if (status === 'idle') return null
+  return (
+    <div className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
+      status === 'saving' ? 'text-gray-500 bg-gray-100' :
+      status === 'saved'  ? 'text-green-700 bg-green-50 border border-green-200' :
+                            'text-red-700 bg-red-50 border border-red-200'
+    }`}>
+      {status === 'saving' && (
+        <span className="w-3 h-3 border-2 border-gray-400 border-t-gray-600 rounded-full animate-spin flex-shrink-0" />
+      )}
+      {status === 'saving' ? 'שומר...' : status === 'saved' ? '✓ נשמר' : '⚠ שגיאה בשמירה'}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────
    Toast
 ───────────────────────────────────────── */
 function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
@@ -232,6 +253,7 @@ function BlockCard({
   isFirst,
   isLast,
   onSave,
+  onAutoSave,
   onDelete,
   onMoveUp,
   onMoveDown,
@@ -240,6 +262,7 @@ function BlockCard({
   isFirst: boolean
   isLast: boolean
   onSave: (data: Partial<Block>) => Promise<void>
+  onAutoSave: (data: Partial<Block>) => Promise<void>
   onDelete: () => Promise<void>
   onMoveUp: () => Promise<void>
   onMoveDown: () => Promise<void>
@@ -272,6 +295,25 @@ function BlockCard({
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Auto-save: debounce form changes when block is open for editing
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isFirstFormRender = useRef(true)
+  useEffect(() => {
+    if (isFirstFormRender.current) { isFirstFormRender.current = false; return }
+    if (!editing) return
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(() => {
+      onAutoSave({
+        title:       form.title.trim()       || null,
+        description: form.description.trim() || null,
+        url:         form.url.trim()         || null,
+        caption:     form.caption.trim()     || null,
+      })
+    }, 700)
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form])
 
   const handleSave = async () => {
     setSaving(true)
@@ -502,8 +544,24 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
   const [previewMode, setPreviewMode] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
 
   const showToast = useCallback((msg: string) => setToast(msg), [])
+
+  // Save status reporting — auto-clears 'saved' after 2 s
+  const statusClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reportStatus = useCallback((s: SaveStatus) => {
+    setSaveStatus(s)
+    if (statusClearTimer.current) clearTimeout(statusClearTimer.current)
+    if (s === 'saved') {
+      statusClearTimer.current = setTimeout(() => setSaveStatus('idle'), 2000)
+    }
+  }, [])
+
+  // Track whether meta form has been hydrated from the API (so we don't auto-save on load)
+  const metaHasLoaded = useRef(false)
+  const metaFormRef = useRef(metaForm)
+  useEffect(() => { metaFormRef.current = metaForm }, [metaForm])
 
   /* ── Drag & drop sensors ── */
   const sensors = useSensors(
@@ -535,6 +593,8 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
             : '',
           isOpen: data.isOpen ?? false,
         })
+        // Allow auto-save after initial hydration settles
+        setTimeout(() => { metaHasLoaded.current = true }, 500)
         // Fetch course title for breadcrumb/context
         if (data.courseId) {
           fetch(`/api/courses/${data.courseId}`)
@@ -551,26 +611,46 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
       .catch((err) => console.error('[EditUnit] blocks fetch error:', err))
   }, [status, params.id])
 
-  const saveMeta = async () => {
-    setMetaSaving(true)
-    const res = await fetch('/api/units', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: params.id,
-        title: metaForm.title.trim(),
-        content: metaForm.content,
-        zoomLink: metaForm.zoomLink.trim() || null,
-        orderIndex: metaForm.orderIndex,
-        openDate: metaForm.openDate || null,
-        isOpen: metaForm.isOpen,
-      }),
-    })
-    const data = await res.json()
-    setUnit((prev) => (prev ? { ...prev, ...data } : null))
-    setMetaSaving(false)
-    showToast('פרטי היחידה נשמרו')
+  const saveMeta = async (silent = false) => {
+    if (!silent) setMetaSaving(true)
+    reportStatus('saving')
+    try {
+      const f = metaFormRef.current
+      const res = await fetch('/api/units', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: params.id,
+          title: f.title.trim(),
+          content: f.content,
+          zoomLink: f.zoomLink.trim() || null,
+          orderIndex: f.orderIndex,
+          openDate: f.openDate || null,
+          isOpen: f.isOpen,
+        }),
+      })
+      const data = await res.json()
+      setUnit((prev) => (prev ? { ...prev, ...data } : null))
+      reportStatus('saved')
+      if (!silent) showToast('פרטי היחידה נשמרו')
+    } catch {
+      reportStatus('error')
+    } finally {
+      if (!silent) setMetaSaving(false)
+    }
   }
+
+  // Meta auto-save (debounced 700 ms, skips initial load)
+  const metaAutoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!metaHasLoaded.current) return
+    if (!metaForm.title.trim()) return
+    if (metaAutoSaveTimer.current) clearTimeout(metaAutoSaveTimer.current)
+    metaAutoSaveTimer.current = setTimeout(() => { saveMeta(true) }, 700)
+    return () => { if (metaAutoSaveTimer.current) clearTimeout(metaAutoSaveTimer.current) }
+  // saveMeta is stable enough via metaFormRef — listing metaForm triggers the effect correctly
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metaForm])
 
   const addBlock = async (type: string) => {
     try {
@@ -594,17 +674,24 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
   }
 
   const updateBlock = useCallback(
-    async (blockId: string, data: Partial<Block>) => {
-      const res = await fetch(`/api/admin/units/${params.id}/media/${blockId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      const updated = await res.json()
-      setBlocks((prev) => prev.map((b) => (b.id === blockId ? updated : b)))
-      showToast('בלוק נשמר')
+    async (blockId: string, data: Partial<Block>, silent = false) => {
+      if (!silent) reportStatus('saving')
+      try {
+        reportStatus('saving')
+        const res = await fetch(`/api/admin/units/${params.id}/media/${blockId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+        const updated = await res.json()
+        setBlocks((prev) => prev.map((b) => (b.id === blockId ? updated : b)))
+        reportStatus('saved')
+        if (!silent) showToast('בלוק נשמר')
+      } catch {
+        reportStatus('error')
+      }
     },
-    [params.id, showToast],
+    [params.id, showToast, reportStatus],
   )
 
   const deleteBlock = useCallback(
@@ -731,7 +818,7 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
             <span className="text-gray-600 truncate max-w-[200px]">{unit.title}</span>
           </div>
           {/* Title row */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <h1 className="text-base font-bold text-gray-800 truncate">
               עריכת יחידה
               {courseTitle && (
@@ -740,9 +827,12 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
                 </span>
               )}
             </h1>
-            <Link href="/admin/units" className="text-xs text-indigo-600 hover:underline font-medium">
-              ← חזרה לרשימה
-            </Link>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <SaveStatusBar status={saveStatus} />
+              <Link href="/admin/units" className="text-xs text-indigo-600 hover:underline font-medium">
+                ← חזרה לרשימה
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
@@ -861,7 +951,7 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
 
             <div className="flex justify-end">
               <button
-                onClick={saveMeta}
+                onClick={() => saveMeta()}
                 disabled={metaSaving || !metaForm.title.trim()}
                 className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl
                   hover:bg-indigo-700 disabled:opacity-50 transition-colors"
@@ -989,6 +1079,7 @@ export default function EditUnitPage({ params }: { params: { id: string } }) {
                           isFirst={idx === 0}
                           isLast={idx === sortedBlocks.length - 1}
                           onSave={(data) => updateBlock(block.id, data)}
+                          onAutoSave={(data) => updateBlock(block.id, data, true)}
                           onDelete={() => deleteBlock(block.id)}
                           onMoveUp={() => moveBlock(block.id, 'up')}
                           onMoveDown={() => moveBlock(block.id, 'down')}
